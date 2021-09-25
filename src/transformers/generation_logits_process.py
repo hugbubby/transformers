@@ -13,9 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from abc import ABC
 import inspect
 import math
-from abc import ABC
 from typing import Callable, Iterable, List, Tuple
 
 import numpy as np

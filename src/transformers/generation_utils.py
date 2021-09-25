@@ -14,9 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import warnings
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union
+import warnings
 
 import torch
 import torch.distributed as dist
@@ -30,17 +30,17 @@ from .generation_logits_process import (
     ForcedEOSTokenLogitsProcessor,
     HammingDiversityLogitsProcessor,
     InfNanRemoveLogitsProcessor,
+    LogitBiasProcessor,
     LogitsProcessorList,
     MinLengthLogitsProcessor,
     NoBadWordsLogitsProcessor,
     NoRepeatNGramLogitsProcessor,
     PrefixConstrainedLogitsProcessor,
-    LogitBiasProcessor,
     RepetitionPenaltyLogitsProcessor,
+    TailFreeSamplingLogitsWarper,
     TemperatureLogitsWarper,
     TopKLogitsWarper,
     TopPLogitsWarper,
-    TailFreeSamplingLogitsWarper,
 )
 from .generation_stopping_criteria import (
     MaxLengthCriteria,
@@ -586,6 +586,7 @@ class GenerationMixin:
         repetition_penalty_frequency: float,
         repetition_penalty_presence: float,
         repetition_penalty_whitelist: List[int],
+        repetition_penalty_supplemental_blacklist: List[int],
         no_repeat_ngram_size: int,
         encoder_no_repeat_ngram_size: int,
         encoder_input_ids: torch.LongTensor,
@@ -601,6 +602,7 @@ class GenerationMixin:
         num_beam_groups: int,
         diversity_penalty: float,
         remove_invalid_values: bool,
+        rpsb_weight: float = 1.0,
     ) -> LogitsProcessorList:
         """
         This class returns a :obj:`~transformers.LogitsProcessorList` list object that contains all relevant
@@ -645,6 +647,19 @@ class GenerationMixin:
             processors.append(LogitBiasProcessor(logit_bias))
         if (repetition_penalty is not None and repetition_penalty > 1.0) or (repetition_penalty_frequency is not None and repetition_penalty_frequency > 0.0) or (repetition_penalty_presence is not None and repetition_penalty_presence > 0.0):
             processors.append(RepetitionPenaltyLogitsProcessor(penalty=repetition_penalty, m=repetition_penalty_slope, penalize_last=repetition_penalty_range, alpha_frequency=repetition_penalty_frequency, alpha_presence=repetition_penalty_presence, whitelist=repetition_penalty_whitelist))
+            #This is the most effective way to do this given the state this application is in
+            #I'm not kidding
+            if repetition_penalty_supplemental_blacklist is not None and len(repetition_penalty_supplemental_blacklist) > 0:
+                whitelist = [i for i in range(100000) if ( # I know, I know
+                    i not in repetition_penalty_supplemental_blacklist
+                )]
+                processors.append(RepetitionPenaltyLogitsProcessor(penalty=(repetition_penalty-1)*rpsb_weight + 1, 
+                    m=repetition_penalty_slope, 
+                    penalize_last=repetition_penalty_range, 
+                    alpha_frequency=repetition_penalty_frequency * rpsb_weight if repetition_penalty_frequency is not None else None, 
+                    alpha_presence=repetition_penalty_presence * rpsb_weight if repetition_penalty_presence is not None else None, 
+                    whitelist=whitelist,
+                ))
         if no_repeat_ngram_size is not None and no_repeat_ngram_size > 0:
             processors.append(NoRepeatNGramLogitsProcessor(no_repeat_ngram_size))
         if encoder_no_repeat_ngram_size is not None and encoder_no_repeat_ngram_size > 0:
@@ -680,6 +695,9 @@ class GenerationMixin:
             stopping_criteria.append(MaxTimeCriteria(max_time=max_time))
         return stopping_criteria
 
+    #What in the ever living fuck is this function
+    #just let me put in the goddamned logit processor myself
+    #what the fuck are these people smoking
     @torch.no_grad()
     def generate(
         self,
@@ -699,6 +717,7 @@ class GenerationMixin:
         repetition_penalty_frequency: Optional[float] = None,
         repetition_penalty_presence: Optional[float] = None,
         repetition_penalty_whitelist: List[int] = None,
+        repetition_penalty_supplemental_blacklist: List[int] = None, #Adds an additional repetition penalty to a set of characters. 
         bad_words_ids: Optional[Iterable[int]] = None,
         logit_bias: Optional[List[Tuple[int, float]]] = None,
         bos_token_id: Optional[int] = None,
@@ -1004,6 +1023,7 @@ class GenerationMixin:
             repetition_penalty_frequency=repetition_penalty_frequency,
             repetition_penalty_presence=repetition_penalty_presence,
             repetition_penalty_whitelist=repetition_penalty_whitelist,
+            repetition_penalty_supplemental_blacklist=repetition_penalty_supplemental_blacklist,
             no_repeat_ngram_size=no_repeat_ngram_size,
             encoder_no_repeat_ngram_size=encoder_no_repeat_ngram_size,
             encoder_input_ids=encoder_input_ids,
