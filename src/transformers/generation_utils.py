@@ -22,6 +22,8 @@ import torch
 import torch.distributed as dist
 from torch.nn import functional as F
 
+import transformers.sentence_detect
+
 from .file_utils import ModelOutput
 from .generation_beam_search import BeamScorer, BeamSearchScorer
 from .generation_logits_process import (
@@ -1334,7 +1336,7 @@ class GenerationMixin:
         decoder_attentions = () if (return_dict_in_generate and output_attentions) else None
         cross_attentions = () if (return_dict_in_generate and output_attentions) else None
         decoder_hidden_states = () if (return_dict_in_generate and output_hidden_states) else None
-
+        
         # if model is an encoder-decoder, retrieve encoder attention weights and hidden states
         if return_dict_in_generate and self.config.is_encoder_decoder:
             encoder_attentions = model_kwargs["encoder_outputs"].get("attentions") if output_attentions else None
@@ -1464,6 +1466,7 @@ class GenerationMixin:
         return_dict_in_generate: Optional[bool] = None,
         synced_gpus: Optional[bool] = None,
         embs: Optional[List[Tuple[int, torch.FloatTensor]]] = None,
+        generate_until_sentence: Optional[bool] = False,
         **model_kwargs,
     ) -> Union[SampleOutput, torch.LongTensor]:
         r"""
@@ -1593,9 +1596,13 @@ class GenerationMixin:
         cur_len = input_ids.shape[-1]
 
         this_peer_finished = False  # used by synced_gpus only
+        
+        token_accum = []
+        extra_token_counter = 0
+        extra_generation = False
+
         # auto-regressive generation
         while True:
-
             if synced_gpus:
                 # Under synced_gpus the `forward` call must continue until all gpus complete their sequence.
                 # The following logic allows an early break if all peers finished generating their sequence
@@ -1670,12 +1677,27 @@ class GenerationMixin:
             if eos_token_id is not None:
                 unfinished_sequences = unfinished_sequences.mul((next_tokens != eos_token_id).long())
 
-            # stop when each sentence is finished, or if we exceed the maximum length
-            if unfinished_sequences.max() == 0 or stopping_criteria(input_ids, scores):
-                if not synced_gpus:
+            if unfinished_sequences.max() == 0:
+                break
+            
+            sentence_generation_padding = 20
+
+            token_accum.append(int(next_tokens[0]))
+
+            if extra_generation:
+                extra_token_counter += 1
+                if (extra_token_counter >= sentence_generation_padding) or (generate_until_sentence and transformers.sentence_detect.is_sentence_tokens(token_accum)):
                     break
+            elif stopping_criteria(input_ids, scores):
+                if generate_until_sentence and not transformers.sentence_detect.is_sentence_tokens(token_accum) and extra_token_counter < sentence_generation_padding:
+                    extra_generation = True
                 else:
-                    this_peer_finished = True
+                    if not synced_gpus:
+                        break
+                    else:
+                        this_peer_finished = True
+            else:
+                yield next_tokens, False
 
         if return_dict_in_generate:
             if self.config.is_encoder_decoder:
