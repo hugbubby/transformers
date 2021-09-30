@@ -1661,7 +1661,6 @@ class GenerationMixin:
             if return_dict_in_generate and output_nonzero_probs:
                 nonzero_probs += ((probs > 0).sum(dim=1),)
             next_tokens = torch.multinomial(probs.float(), num_samples=1).squeeze(1)
-            print(type(next_tokens))
 
             # finished sentences should have their next token be a padding token
             if eos_token_id is not None:
@@ -1678,13 +1677,13 @@ class GenerationMixin:
             if eos_token_id is not None:
                 unfinished_sequences = unfinished_sequences.mul((next_tokens != eos_token_id).long())
 
-            sentence_generation_padding = 20
+            sentence_generation_padding = 25
 
             for i in range(len(next_tokens)):
                 token_accum[i].append(int(next_tokens[i]))
 
             for i in range(len(pseudo_finished)):
-                if pseudo_finished[i]:
+                if pseudo_finished[i] and unfinished_sequences[i] == 1:
                     extra_token_counters[i] += 1
                     if (extra_token_counters[i] >= sentence_generation_padding) or (generate_until_sentence and transformers.sentence_detect.is_sentence_tokens(token_accum[i])):
                         unfinished_sequences[i] = 0
