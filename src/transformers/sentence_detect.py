@@ -28,7 +28,3 @@ def is_sentence_tokens(tokens, tokenizer=default_tokenizer):
         map(lambda ending: text.endswith(ending), ends),
     )
     return out
-
-if __name__ == '__main__':
-    encoding = default_tokenizer.encode("She told her she had been drunk, but she hadn")
-    print(is_sentence_tokens(encoding))
