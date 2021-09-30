@@ -150,9 +150,6 @@ class TextGenerationPipeline(Pipeline):
             result = []
             for generated_sequence in output_sequences:
                 if self.framework == "pt" and generated_sequence is not None:
-                    print(type(generated_sequence))
-                    print(type(generated_sequence[0]))
-                    print(type(generated_sequence[1]))
                     generated_sequence = generated_sequence.cpu()
                 generated_sequence = generated_sequence.numpy().tolist()
                 record = {}
