@@ -1597,7 +1597,7 @@ class GenerationMixin:
 
         this_peer_finished = False  # used by synced_gpus only
         
-        token_accum: List[List[int]] = []
+        token_accum: List[List[int]] = [[] for _ in unfinished_sequences]
         pseudo_finished: List[bool] = [False for _ in unfinished_sequences]
         extra_token_counters: List[int] = [0 for _ in unfinished_sequences]
 
