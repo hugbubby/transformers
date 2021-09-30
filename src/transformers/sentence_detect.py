@@ -23,5 +23,4 @@ def is_sentence_tokens(tokens, tokenizer=default_tokenizer):
     ) and any(
         map(lambda ending: text.endswith(ending), ends),
     )
-    print("Token accum (sentence check) on ", out, ": ", text)
     return out
