@@ -18,10 +18,10 @@ default_tokenizer = GPT2TokenizerFast.from_pretrained('gpt2')
 
 def is_sentence_tokens(tokens, tokenizer=default_tokenizer):
     text: str = tokenizer.decode(tokens)
-    print("Token accum (sentence check): ", text)
     out = not any(
         map(lambda ending: text.endswith(ending), exception_ends) #No non-end-of-sentence-periods
     ) and any(
         map(lambda ending: text.endswith(ending), ends),
     )
+    print("Token accum (sentence check) on ", out, ": ", text)
     return out
