@@ -1696,8 +1696,6 @@ class GenerationMixin:
                         break
                     else:
                         this_peer_finished = True
-            else:
-                yield next_tokens, False
 
         if return_dict_in_generate:
             if self.config.is_encoder_decoder:
