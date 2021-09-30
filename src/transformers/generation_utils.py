@@ -1597,15 +1597,13 @@ class GenerationMixin:
 
         this_peer_finished = False  # used by synced_gpus only
         
-        token_accum = []
-        extra_token_counter = 0
-        extra_generation = False
+        token_accum: List[List[int]] = []
+        pseudo_finished: List[bool] = [False for _ in unfinished_sequences]
+        extra_token_counters: List[int] = [0 for _ in unfinished_sequences]
 
         # auto-regressive generation
         i = 0
         while True:
-            print("Loop #:", i)
-            i += 1
             if synced_gpus:
                 # Under synced_gpus the `forward` call must continue until all gpus complete their sequence.
                 # The following logic allows an early break if all peers finished generating their sequence
@@ -1663,6 +1661,7 @@ class GenerationMixin:
             if return_dict_in_generate and output_nonzero_probs:
                 nonzero_probs += ((probs > 0).sum(dim=1),)
             next_tokens = torch.multinomial(probs.float(), num_samples=1).squeeze(1)
+            print(type(next_tokens))
 
             # finished sentences should have their next token be a padding token
             if eos_token_id is not None:
@@ -1676,29 +1675,32 @@ class GenerationMixin:
             )
             cur_len = cur_len + 1
 
-            # if eos_token was found in one sentence, set sentence to finished
             if eos_token_id is not None:
                 unfinished_sequences = unfinished_sequences.mul((next_tokens != eos_token_id).long())
 
-            if unfinished_sequences.max() == 0:
-                break
-            
             sentence_generation_padding = 20
 
-            token_accum.append(int(next_tokens[0]))
+            for i in range(len(next_tokens)):
+                token_accum[i].append(int(next_tokens[i]))
 
-            if extra_generation:
-                extra_token_counter += 1
-                if (extra_token_counter >= sentence_generation_padding) or (generate_until_sentence and transformers.sentence_detect.is_sentence_tokens(token_accum)):
-                    break
-            elif stopping_criteria(input_ids, scores):
-                if generate_until_sentence and not transformers.sentence_detect.is_sentence_tokens(token_accum) and extra_token_counter < sentence_generation_padding:
-                    extra_generation = True
+            for i in range(len(pseudo_finished)):
+                if pseudo_finished[i]:
+                    extra_token_counters[i] += 1
+                    if (extra_token_counters[i] >= sentence_generation_padding) or (generate_until_sentence and transformers.sentence_detect.is_sentence_tokens(token_accum[i])):
+                        unfinished_sequences[i] = 0
+
+            if stopping_criteria(input_ids, scores):
+                if generate_until_sentence:
+                    pseudo_finished = [True for _ in pseudo_finished]
                 else:
                     if not synced_gpus:
                         break
                     else:
                         this_peer_finished = True
+            
+            if unfinished_sequences.max() == 0:
+                break
+            
 
         if return_dict_in_generate:
             if self.config.is_encoder_decoder:
