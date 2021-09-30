@@ -1,7 +1,7 @@
 from transformers import GPT2TokenizerFast
 
 ends = ['!', '.', '?']
-ends.extend(map(lambda end: end + '"', ends))
+ends.extend(list(map(lambda end: end + '"', ends)))
 
 quotation_chars = ['"', "'"]
 
