@@ -16,13 +16,16 @@
 from abc import ABC
 import inspect
 import math
+import time
 from typing import Callable, Iterable, List, Tuple
 
 import numpy as np
+import requests
 import torch
 
 from .file_utils import add_start_docstrings
 from .utils.logging import get_logger
+
 
 
 logger = get_logger(__name__)
@@ -141,7 +144,6 @@ class TemperatureLogitsWarper(LogitsWarper):
         scores = scores / self.temperature
         return scores
 
-
 class LogitBiasProcessor(LogitsProcessor):
     r"""
     :class:`transformers.LogitsProcessor` adding bias to specific tokens
@@ -151,19 +153,43 @@ class LogitBiasProcessor(LogitsProcessor):
             Adds a float bias to the given token's logit.
     """
 
-    def __init__(self, logit_bias: List[Tuple[int, float]]=[]):
+    def __init__(self, logit_bias: List[Tuple[List[int], float]]=[]):
         if not isinstance(logit_bias, list) and len(logit_bias) > 0:
             raise ValueError("`logit_bias` has to be a non-empty list")
         self.logit_bias = logit_bias
-        self.bias = None
 
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-        if self.bias is None:
-            self.bias = torch.zeros(scores.shape[1]).float()
-            logit_bias = torch.tensor(self.logit_bias)
-            self.bias.scatter_(0, logit_bias[:,0].long(), logit_bias[:,1].float())
-            self.bias = self.bias.to(scores.dtype).to(scores.device).unsqueeze(0)
-        return scores + self.bias
+        num_batches = input_ids.shape[0]
+        for logit_bias_instance in self.logit_bias: #NOOOOOO!!! YOU CANT JUST USE FOR LOOPS INSTEAD OF MATRIX MULTIPLICATION!!!!!!!! THE 2NS DELAYSSSS!!!
+            toks = logit_bias_instance[0]
+            bias = logit_bias_instance[1]
+            if len(toks) == 1:
+                for batch_num in range(num_batches):
+                    scores[batch_num][toks[0]] = scores[batch_num][toks[0]] + bias
+            else:
+                for batch_num in range(input_ids.shape[0]):
+                    for i in range(len(toks)-1):
+                        if input_ids[batch_num][-1] == toks[i]:
+                            correct = True
+                            for j in range(i-1):
+                                if input_ids[batch_num][j-i] != toks[j]:
+                                    correct = False
+                                    break
+                            if correct:
+                                prob_of_phrase = 1
+                                if i < len(toks) - 1:
+                                    start = time.time()
+                                    prob_of_phrase = math.exp(requests.get('localhost:3000/phrase_score', 
+                                        json={
+                                            "inputs":list(input_ids[batch_num]), 
+                                            "toks": list(toks[i+1:]),
+                                        }).json()['phrase_score'],
+                                    )
+                                    end = time.time()
+                                    print("Time for gpt2 generation: ", end - start)
+                                scores[batch_num][toks[i]] = scores[batch_num][toks[i]] + (bias * prob_of_phrase)
+                            break
+        return scores
 
 
 class RepetitionPenaltyLogitsProcessor(LogitsProcessor):

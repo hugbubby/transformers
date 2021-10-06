@@ -593,7 +593,7 @@ class GenerationMixin:
         encoder_no_repeat_ngram_size: int,
         encoder_input_ids: torch.LongTensor,
         bad_words_ids: List[List[int]],
-        logit_bias: List[Tuple[int, float]],
+        logit_bias: List[Tuple[List[int], float]],
         min_length: int,
         max_length: int,
         eos_token_id: int,
@@ -721,7 +721,7 @@ class GenerationMixin:
         repetition_penalty_whitelist: List[int] = None,
         repetition_penalty_supplemental_blacklist: List[int] = None, #Adds an additional repetition penalty to a set of characters. 
         bad_words_ids: Optional[Iterable[int]] = None,
-        logit_bias: Optional[List[Tuple[int, float]]] = None,
+        logit_bias: Optional[List[Tuple[List[int], float]]] = None,
         bos_token_id: Optional[int] = None,
         pad_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = None,
