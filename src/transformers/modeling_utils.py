@@ -14,20 +14,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import inspect
-import os
-import re
-import warnings
 from contextlib import contextmanager
 from dataclasses import dataclass
+import inspect
+import os
+from pathlib import Path
+import re
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
+import warnings
 
+import numpy as np
 import torch
 from torch import Tensor, device, dtype, nn
 from torch.nn import CrossEntropyLoss
 from torch.nn import functional as F
-
-import numpy as np
 
 from .activations import get_activation
 from .configuration_utils import PretrainedConfig
@@ -35,12 +35,12 @@ from .file_utils import (
     CONFIG_NAME,
     DUMMY_INPUTS,
     FLAX_WEIGHTS_NAME,
-    TF2_WEIGHTS_NAME,
-    TF_WEIGHTS_NAME,
-    SPLIT_WEIGHTS_NAME,
-    WEIGHTS_NAME,
     ModelOutput,
     PushToHubMixin,
+    SPLIT_WEIGHTS_NAME,
+    TF2_WEIGHTS_NAME,
+    TF_WEIGHTS_NAME,
+    WEIGHTS_NAME,
     cached_path,
     hf_bucket_url,
     is_offline_mode,
@@ -55,7 +55,7 @@ try:
     from collections.abc import MutableMapping
 except ImportError:
     from collections import MutableMapping
-from pathlib import Path
+
 
 logger = logging.get_logger(__name__)
 
@@ -1141,6 +1141,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # Load model
         if pretrained_model_name_or_path is not None:
+            logger.info("HF: Loading model from pretrained model name or path")
             pretrained_model_name_or_path = str(pretrained_model_name_or_path)
             if os.path.isdir(pretrained_model_name_or_path):
                 if config.subfolder is not None:
@@ -1222,6 +1223,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 logger.info(f"loading weights file {archive_file} from cache at {resolved_archive_file}")
         else:
             resolved_archive_file = None
+        
+        logger.info("HF: Past archive file portion")
 
         # Instantiate model.
         if is_deepspeed_zero3_enabled():
@@ -1285,13 +1288,17 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         "If you tried to load a PyTorch model from a TF 2.0 checkpoint, please set from_tf=True. "
                     )
 
+            logger.info("HF: Loading state dict from within from_pretrained")
             model, missing_keys, unexpected_keys, error_msgs = cls._load_state_dict_into_model(
                 model, state_dict, pretrained_model_name_or_path
             )
+            logger.info("HF: State dict loaded from from_pretrained")
 
+        logger.info("HF: Making sure token embedding weights are still tied")
         # make sure token embedding weights are still tied if needed
         model.tie_weights()
 
+        logger.info("HF: Setting model in evaluation mode")
         # Set model in evaluation mode to deactivate DropOut modules by default
         model.eval()
 
