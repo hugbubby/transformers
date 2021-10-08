@@ -1237,8 +1237,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 with no_init_weights(_enable=_fast_init):
                     model = cls(config, *model_args, **model_kwargs)
         else:
+            logger.info("HF: Setting non-deepspeed model using cls func")
             with no_init_weights(_enable=_fast_init):
                 model = cls(config, *model_args, **model_kwargs)
+            logger.info("HF: Done setting model using cls func")
 
         if from_tf:
             if resolved_archive_file.endswith(".index"):
