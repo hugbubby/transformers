@@ -149,7 +149,7 @@ class LogitBiasProcessor(LogitsProcessor):
     :class:`transformers.LogitsProcessor` adding bias to specific tokens
 
     Args:
-        logit_biases (:obj:`List[Tuple[int, float]]`):
+        logit_biases (:obj:`List[Tuple[List[int], float]]`):
             Adds a float bias to the given token's logit.
     """
 
@@ -171,23 +171,12 @@ class LogitBiasProcessor(LogitsProcessor):
                     for i in range(len(toks)-1):
                         if input_ids[batch_num][-1] == toks[i]:
                             correct = True
-                            for j in range(i-1):
-                                if input_ids[batch_num][j-i] != toks[j]:
+                            for j in range(i+1):
+                                if input_ids[batch_num][-1-j] != toks[i-j]:
                                     correct = False
                                     break
                             if correct:
-                                prob_of_phrase = 1
-                                if i < len(toks) - 1:
-                                    start = time.time()
-                                    prob_of_phrase = math.exp(requests.get('localhost:3000/phrase_score', 
-                                        json={
-                                            "inputs":list(input_ids[batch_num]), 
-                                            "toks": list(toks[i+1:]),
-                                        }).json()['phrase_score'],
-                                    )
-                                    end = time.time()
-                                    print("Time for gpt2 generation: ", end - start)
-                                scores[batch_num][toks[i]] = scores[batch_num][toks[i]] + (bias * prob_of_phrase)
+                                scores[batch_num][toks[i]] = scores[batch_num][toks[i]] + bias * (0.5 + (i/len(toks))*0.5)
                             break
         return scores
 
