@@ -18,14 +18,19 @@
 import os
 from typing import Tuple
 
+from einops import rearrange, repeat
 import torch
-import torch.nn.functional as F
-import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
+import torch.nn.functional as F
+import torch.utils.checkpoint
 
 from ...activations import ACT2FN
-from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
+from ...file_utils import (
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+)
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -35,8 +40,6 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
 from .configuration_gpt_neo import GPTNeoConfig
-
-from einops import rearrange, repeat
 
 
 logger = logging.get_logger(__name__)
@@ -915,8 +918,10 @@ class GPTNeoForCausalLM(GPTNeoPreTrainedModel):
             ``labels = input_ids`` Indices are selected in ``[-100, 0, ..., config.vocab_size]`` All labels set to
             ``-100`` are ignored (masked), the loss is only computed for labels in ``[0, ..., config.vocab_size]``
         """
+        logger.info("HF: Calling forward on GPT Neo")
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        logger.info("HF: Running self.transformer on GPT Neo forward")
         transformer_outputs = self.transformer(
             input_ids,
             past_key_values=past_key_values,
@@ -932,8 +937,10 @@ class GPTNeoForCausalLM(GPTNeoPreTrainedModel):
             embs=embs,
         )
         hidden_states = transformer_outputs[0]
+        logger.info("HF: Assigned hidden states from self.transformer on GPT Neo forward")
 
         lm_logits = self.lm_head(hidden_states).float()
+        logger.info("HF: Assigned logits from hidden states on GPT Neo forward")
 
         loss = None
         if labels is not None:
@@ -955,13 +962,16 @@ class GPTNeoForCausalLM(GPTNeoPreTrainedModel):
             output = (lm_logits,) + transformer_outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
-        return CausalLMOutputWithPast(
+        logger.info("HF: Getting causal lm output with past on gpt neo")
+        ret = CausalLMOutputWithPast(
             loss=loss,
             logits=lm_logits,
             past_key_values=transformer_outputs.past_key_values,
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
+        logger.info("HF: Exiting forward on GPT Neo")
+        return ret
 
     @staticmethod
     def _reorder_cache(past: Tuple[Tuple[torch.Tensor]], beam_idx: torch.Tensor) -> Tuple[Tuple[torch.Tensor]]:
