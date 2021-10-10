@@ -1240,6 +1240,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             logger.info("HF: Setting non-deepspeed model using cls func")
             with no_init_weights(_enable=_fast_init):
                 logger.info("HF: Inside no_init_weights container")
+                logger.info(type(cls))
+                logger.info(locals())
+                logger.info(cls)
                 model = cls(config, *model_args, **model_kwargs)
                 logger.info("HF: Exiting no_init_weights container")
             logger.info("HF: Done setting model using cls func")
