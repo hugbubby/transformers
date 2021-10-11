@@ -427,14 +427,21 @@ class GPTNeoMLP(nn.Module):
 
 class GPTNeoBlock(nn.Module):
     def __init__(self, config, layer_id):
+        logger.info("HF: Initting GPTNeoBlock")
+        logger.info("HF: Super() initting GPTNeoBlock")
         super().__init__()
+        logger.info("HF: Finished Super() initting GPTNeoBlock")
         hidden_size = config.hidden_size
         inner_dim = config.intermediate_size if config.intermediate_size is not None else 4 * hidden_size
+        logger.info("HF: Finished Super() initting GPTNeoBlock")
         self.ln_1 = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
+        logger.info("HF: Setting attn to GPTNeoAttention")
         self.attn = GPTNeoAttention(config, layer_id)
         self.jax = config.jax
         if not self.jax:
+            logger.info("HF: Setting LayerNorm to nn.LayerNorm")
             self.ln_2 = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
+        logger.info("HF: Setting mlp to GPTNeoMLP (" + str(inner_dim) + ",config")
         self.mlp = GPTNeoMLP(inner_dim, config)
 
     def forward(
