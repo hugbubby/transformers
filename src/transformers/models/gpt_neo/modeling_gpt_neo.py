@@ -139,10 +139,15 @@ def load_tf_weights_in_gpt_neo(model, config, gpt_neo_checkpoint_path):
     return model
 
 def to_gpu(x, config):
+    logger.info("HF: Inside to_gpu func")
     model_dtypes = {"fp16": torch.float16, "fp32": torch.float32, "bf16": torch.bfloat16}
+    logger.info("HF: Actually making x.to() call with dtype " + config.model_dtype)
     x = x.to(model_dtypes[config.model_dtype])
     if config.model_device is not None:
+        logger.info("HF: Making x.to(config.model_device) call as well")
         return x.to(config.model_device)
+    logger.info("Finished with to() calls")
+
     colab = False
     space = False
     gb = 8000
@@ -158,9 +163,12 @@ def to_gpu(x, config):
             space = True
     except:
         pass
+
     if colab or space:
+        logger.info("HF: Returning x.cuda and exiting to_gpu()")
         return x.cuda()
     else:
+        logger.info("HF: Returning x and exiting to_gpu()")
         return x
 
 def fixed_pos_embedding(dim=None, seq_len=None):
