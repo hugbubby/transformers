@@ -491,7 +491,9 @@ class GPTNeoPreTrainedModel(PreTrainedModel):
     base_model_prefix = "transformer"
 
     def __init__(self, *inputs, **kwargs):
+        logger.info("HF: Running super().__init__ in GPTNeoPretrainedModel")
         super().__init__(*inputs, **kwargs)
+        logger.info("HF: Finished super().__init__ in GPTNeoPretrainedModel")
 
     def _init_weights(self, module):
         """Initialize the weights."""
@@ -600,20 +602,30 @@ GPT_NEO_INPUTS_DOCSTRING = r"""
 )
 class GPTNeoModel(GPTNeoPreTrainedModel):
     def __init__(self, config):
+        logger.info("HF: Running __init__ in GPTNeoModel")
+        logger.info("HF: Running super()__init__ in GPTNeoModel")
         super().__init__(config)
+        logger.info("HF: Finished super()__init__ in GPTNeoModel")
 
         self.embed_dim = config.hidden_size
         self.jax = config.jax
         self.vocab_size = config.vocab_size
+        logger.info("HF: Assigning WTE embedding in GPTNeoModel")
         self.wte = nn.Embedding(config.vocab_size, self.embed_dim)
         if not config.rotary:
+            logger.info("HF: Assigning WPE embedding in GPTNeoModel")
             self.wpe = nn.Embedding(config.max_position_embeddings, self.embed_dim)
+        logger.info("HF: Assigning drop nn.Dropout in GPTNeoModel")
         self.drop = nn.Dropout(config.embed_dropout)
+        logger.info("HF: Assigning h nn.ModuleList in GPTNeoModel")
         self.h = nn.ModuleList([to_gpu(GPTNeoBlock(config, layer_id=i), config) for i in range(config.num_layers)])
+        logger.info("HF: Assigning ln_f nn.LayerNorm in GPTNeoModel")
         self.ln_f = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
         self.rotary = config.rotary
 
+        logger.info("HF: Initting weights in GPTNeoModel")
         self.init_weights()
+        logger.info("HF: Finished initting weights and initting GPTNeoModel")
 
     def get_input_embeddings(self):
         return self.wte
