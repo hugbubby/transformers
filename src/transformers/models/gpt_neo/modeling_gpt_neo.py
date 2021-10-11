@@ -310,9 +310,11 @@ class GPTNeoSelfAttention(nn.Module, GPTNeoAttentionMixin):
         if config.rotary_dim is not None:
             self.rotary_dim = config.rotary_dim
         if self.rotary:
-            logger.info("HF: Registering sin and cosign buffer in GPTNeoSelfAttention")
+            logger.info("HF: Registering sin and cosign buffer in GPTNeoSelfAttention. FixedPosEmbedding(",self.rotary_dim, ",", max_positions,")")
             sin, cos = fixed_pos_embedding(dim=self.rotary_dim, seq_len=max_positions)
+            logger.info("HF: Sin...", str(sin))
             self.register_buffer("sin", sin)
+            logger.info("HF: Cos...", str(cos))
             self.register_buffer("cos", cos)
         logger.info("HF: Finishing GPTNeoSelfAttention Init")
 
