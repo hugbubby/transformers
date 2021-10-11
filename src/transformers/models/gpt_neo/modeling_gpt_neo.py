@@ -141,7 +141,7 @@ def load_tf_weights_in_gpt_neo(model, config, gpt_neo_checkpoint_path):
 def to_gpu(x, config):
     logger.info("HF: Inside to_gpu func")
     model_dtypes = {"fp16": torch.float16, "fp32": torch.float32, "bf16": torch.bfloat16}
-    logger.info("HF: Actually making x.to() call with dtype " + config.model_dtype)
+    logger.info("HF: Actually making x.to() call with dtype " + str(config.model_dtype))
     x = x.to(model_dtypes[config.model_dtype])
     if config.model_device is not None:
         logger.info("HF: Making x.to(config.model_device) call as well")
@@ -310,7 +310,7 @@ class GPTNeoSelfAttention(nn.Module, GPTNeoAttentionMixin):
         if config.rotary_dim is not None:
             self.rotary_dim = config.rotary_dim
         if self.rotary:
-            logger.info("HF: Registering sin and cosign buffer in GPTNeoSelfAttention. FixedPosEmbedding(",self.rotary_dim, ",", max_positions,")")
+            logger.info("HF: Registering sin and cosign buffer in GPTNeoSelfAttention. FixedPosEmbedding("+str(self.rotary_dim)+","+str(max_positions)+")")
             sin, cos = fixed_pos_embedding(dim=self.rotary_dim, seq_len=max_positions)
             logger.info("HF: Sin...", str(sin))
             self.register_buffer("sin", sin)
@@ -447,7 +447,7 @@ class GPTNeoMLP(nn.Module):
 
 class GPTNeoBlock(nn.Module):
     def __init__(self, config, layer_id):
-        logger.info("HF: Initting GPTNeoBlock layer ", str(layer_id))
+        logger.info("HF: Initting GPTNeoBlock layer "+ str(layer_id))
         logger.info("HF: super().__init__() GPTNeoBlock")
         super().__init__()
         logger.info("HF: Finished super().__init__() GPTNeoBlock")
