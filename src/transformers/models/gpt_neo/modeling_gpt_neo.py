@@ -251,27 +251,37 @@ class GPTNeoAttentionMixin:
 
 class GPTNeoSelfAttention(nn.Module, GPTNeoAttentionMixin):
     def __init__(self, attention_type, config):
+        logger.info("HF: Initting GPTNeoSelfAttention")
+        logger.info("HF: Running super in GPTNeoSelfAttention")
         super().__init__()
+        logger.info("HF: Finished super in GPTNeoSelfAttention")
 
         self.window_size = None
         max_positions = config.max_position_embeddings
+        
+        logger.info("HF: Running tril in GPTNeoSelfAttention")
         bias = torch.tril(torch.ones((max_positions, max_positions), dtype=torch.uint8)).view(
             1, 1, max_positions, max_positions
         ).bool()
+        logger.info("HF: Finished tril in GPTNeoSelfAttention")
 
         if attention_type == "local":
+            logger.info("HF: Registering local buffer in GPTNeoSelfAttention")
             self.register_buffer(
                 "bias",
                 bias ^ torch.tril(bias, -config.window_size),
             )
         else:
+            logger.info("HF: Registering bias buffer in GPTNeoSelfAttention")
             self.register_buffer(
                 "bias",
                 bias,
             )
 
+        logger.info("HF: Registering masked bias buffer in GPTNeoSelfAttention")
         self.register_buffer("masked_bias", torch.tensor(-1e9))
 
+        logger.info("HF: Setting dropouts in GPTNeoSelfAttention")
         self.attn_dropout = nn.Dropout(config.attention_dropout)
         self.resid_dropout = nn.Dropout(config.resid_dropout)
 
@@ -279,6 +289,7 @@ class GPTNeoSelfAttention(nn.Module, GPTNeoAttentionMixin):
         self.num_heads = config.num_heads
         self.head_dim = self.embed_dim // self.num_heads
         if config.jax:
+            logger.info("HF: Registering scale attn buffer in GPTNeoSelfAttention")
             self.register_buffer("scale_attn", torch.sqrt(torch.tensor(self.head_dim).float()))
         else:
             self.scale_attn = None
@@ -287,19 +298,23 @@ class GPTNeoSelfAttention(nn.Module, GPTNeoAttentionMixin):
                 f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {self.num_heads})."
             )
 
+        logger.info("HF: Setting nn.Linear projections in GPTNeoSelfAttention")
         self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
         self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
         self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=not config.jax)
+
         self.full_bf16 = config.full_bf16
         self.rotary = config.rotary
         self.rotary_dim = self.head_dim
         if config.rotary_dim is not None:
             self.rotary_dim = config.rotary_dim
         if self.rotary:
+            logger.info("HF: Registering sin and cosign buffer in GPTNeoSelfAttention")
             sin, cos = fixed_pos_embedding(dim=self.rotary_dim, seq_len=max_positions)
             self.register_buffer("sin", sin)
             self.register_buffer("cos", cos)
+        logger.info("HF: Finishing GPTNeoSelfAttention Init")
 
     def forward(
         self,
@@ -374,18 +389,21 @@ class GPTNeoSelfAttention(nn.Module, GPTNeoAttentionMixin):
 
 class GPTNeoAttention(nn.Module):
     def __init__(self, config, layer_id=0):
+        logger.info("HF: Running init in GPTNeoAttention")
         super().__init__()
         self.layer_id = layer_id
         self.attention_layers = config.attention_layers
         self.attention_type = self.attention_layers[layer_id]
 
         if self.attention_type in ["global", "local"]:
+            logger.info("HF: Setting self.attention to GPTNeoSelfAttention in GPTNeoAttention")
             self.attention = GPTNeoSelfAttention(self.attention_type, config)
         else:
             raise NotImplementedError(
                 "Only attn layer types 'global' and 'local' exist, but got `config.attention_layers`: "
                 f"{config.attention_layers}. Select attn layer types from ['global', 'local'] only."
             )
+        logger.info("HF: Finished init in GPTNeoAttention")
 
     def forward(
         self,
@@ -428,12 +446,11 @@ class GPTNeoMLP(nn.Module):
 class GPTNeoBlock(nn.Module):
     def __init__(self, config, layer_id):
         logger.info("HF: Initting GPTNeoBlock layer ", layer_id)
-        logger.info("HF: Super() initting GPTNeoBlock")
+        logger.info("HF: super().__init__() GPTNeoBlock")
         super().__init__()
-        logger.info("HF: Finished Super() initting GPTNeoBlock")
+        logger.info("HF: Finished super().__init__() GPTNeoBlock")
         hidden_size = config.hidden_size
         inner_dim = config.intermediate_size if config.intermediate_size is not None else 4 * hidden_size
-        logger.info("HF: Finished Super() initting GPTNeoBlock")
         self.ln_1 = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
         logger.info("HF: Setting attn to GPTNeoAttention")
         self.attn = GPTNeoAttention(config, layer_id)
