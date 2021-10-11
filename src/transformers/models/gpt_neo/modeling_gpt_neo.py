@@ -172,8 +172,13 @@ def to_gpu(x, config):
         return x
 
 def fixed_pos_embedding(dim=None, seq_len=None):
-    inv_freq = 1. / (10000 ** (torch.arange(0, dim, 2) / dim))
+    logger.info("HF: Running fixed_pos_embedding with dim: ", dim)
+    x = (10000 ** (torch.arange(0, dim, 2) / dim))
+    logger.info("HF: Running fixed_pos_embedding with divisor: " + str(x))
+    inv_freq = 1. / x
+    logger.info("HF: Running fixed_pos_embedding with inv_freq: " + str(inv_freq))
     sinusoid_inp = torch.einsum('i , j -> i j', torch.arange(seq_len), inv_freq).float()
+    logger.info("HF: Running fixed_pos_embedding with sinusoid_inp: " + str(sinusoid_inp))
     return torch.sin(sinusoid_inp), torch.cos(sinusoid_inp)
 
 def rotate_every_two(x):
