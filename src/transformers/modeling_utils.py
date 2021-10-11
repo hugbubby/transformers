@@ -418,6 +418,7 @@ class ModuleUtilsMixin:
 
 class SplitCheckpoint(MutableMapping):
     def __init__(self, name_or_path, device="cpu", subfolder=None):
+        logger.info("HF: Initializing split checkpoint")
         self.device = device
         localpath = Path(name_or_path)
         if subfolder is not None:
@@ -433,7 +434,9 @@ class SplitCheckpoint(MutableMapping):
             self.modelname = name_or_path
             self.chkpt_dir = subfolder
             self.remote = True
+        logger.info("HF: Initializing split checkpoint for real")
         self.checkpoint = self._load(SPLIT_WEIGHTS_NAME, None)
+        logger.info("HF: Finished initializing split checkpoint")
     def _load(self, name, shape, **kwparams):
         if self.remote:
             path = hf_bucket_url(self.modelname, name, subfolder=self.chkpt_dir)

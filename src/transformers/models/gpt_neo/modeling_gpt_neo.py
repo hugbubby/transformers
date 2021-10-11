@@ -809,11 +809,16 @@ class GPTNeoForCausalLM(GPTNeoPreTrainedModel):
     _keys_to_ignore_on_save = [r"lm_head.weight"]
 
     def __init__(self, config):
+        logger.info("HF: Running super in GPTNeo")
         super().__init__(config)
+        logger.info("HF: Running to_gpu in GPTNeo")
         self.transformer = to_gpu(GPTNeoModel(config), config)
         self.jax = config.jax
+        logger.info("HF: Running to_gpu in GPTNeo #2")
         self.lm_head = to_gpu(nn.Linear(config.hidden_size, config.vocab_size, bias=self.jax), config)
+        logger.info("HF: Initting weights")
         self.init_weights()
+        logger.info("HF: Finishing initting weights")
 
     def get_output_embeddings(self):
         if self.jax:
