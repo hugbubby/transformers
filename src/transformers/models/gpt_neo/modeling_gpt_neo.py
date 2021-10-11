@@ -427,7 +427,7 @@ class GPTNeoMLP(nn.Module):
 
 class GPTNeoBlock(nn.Module):
     def __init__(self, config, layer_id):
-        logger.info("HF: Initting GPTNeoBlock")
+        logger.info("HF: Initting GPTNeoBlock layer ", layer_id)
         logger.info("HF: Super() initting GPTNeoBlock")
         super().__init__()
         logger.info("HF: Finished Super() initting GPTNeoBlock")
