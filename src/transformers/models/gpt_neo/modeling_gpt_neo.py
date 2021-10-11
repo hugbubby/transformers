@@ -16,7 +16,7 @@
 
 
 import os
-from typing import Tuple
+from typing import List, Tuple
 
 from einops import rearrange, repeat
 import torch
@@ -171,15 +171,30 @@ def to_gpu(x, config):
         logger.info("HF: Returning x and exiting to_gpu()")
         return x
 
+#Making this symbolically computed... Trying to debug something
 def fixed_pos_embedding(dim=None, seq_len=None):
-    logger.info("HF: Running fixed_pos_embedding with dim: ", dim)
-    x = (10000 ** (torch.arange(0, dim, 2) / dim))
-    logger.info("HF: Running fixed_pos_embedding with divisor: " + str(x))
-    inv_freq = 1. / x
+    import sympy
+    logger.info("HF: Running fixed_pos_embedding with dim: " + str(dim))
+    frequency = [10000 ** (i / dim) for i in sympy.Range(0, dim, 2)]
+    logger.info("HF: Running fixed_pos_embedding with frequency: " + str(frequency))
+    inv_freq = [1. / freq for freq in frequency]
     logger.info("HF: Running fixed_pos_embedding with inv_freq: " + str(inv_freq))
-    sinusoid_inp = torch.einsum('i , j -> i j', torch.arange(seq_len), inv_freq).float()
+    sinusoid_inp = [[i * j for j in inv_freq] for i in sympy.Range(seq_len)]
     logger.info("HF: Running fixed_pos_embedding with sinusoid_inp: " + str(sinusoid_inp))
-    return torch.sin(sinusoid_inp), torch.cos(sinusoid_inp)
+    ret_sin: List[List[float]] = []
+    ret_cos: List[List[float]] = []
+    for i in range(len(sinusoid_inp)):
+        ret_sin.append([
+            sympy.sin(
+                sinusoid_inp[i][j]
+            ).evalf() for j in range(len(sinusoid_inp[i]))
+        ])
+        ret_cos.append([
+            sympy.cos(
+                sinusoid_inp[i][j]
+            ).evalf() for j in range(len(sinusoid_inp[i]))
+        ])
+    return torch.tensor(ret_sin), torch.tensor(ret_cos)
 
 def rotate_every_two(x):
     x1 = x[:, :, :, ::2]

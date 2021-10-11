@@ -56,11 +56,11 @@ To create the package for pypi.
 10. Run `make post-release` (or `make post-patch` for a patch release).
 """
 
+from distutils.core import Command
 import os
+from pathlib import Path
 import re
 import shutil
-from distutils.core import Command
-from pathlib import Path
 
 from setuptools import find_packages, setup
 
@@ -138,6 +138,7 @@ _deps = [
     "sphinx==3.2.1",
     "sphinxext-opengraph==0.4.1",
     "starlette",
+    "sympy",
     "tensorflow-cpu>=2.3",
     "tensorflow>=2.3",
     "timeout-decorator",
