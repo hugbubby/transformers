@@ -180,7 +180,6 @@ def fixed_pos_embedding(dim=None, seq_len=None):
     inv_freq = [1. / freq for freq in frequency]
     logger.info("HF: Running fixed_pos_embedding with inv_freq: " + str(inv_freq))
     sinusoid_inp = [[i * j for j in inv_freq] for i in sympy.Range(seq_len)]
-    logger.info("HF: Running fixed_pos_embedding with sinusoid_inp: " + str(sinusoid_inp))
     ret_sin: List[List[float]] = []
     ret_cos: List[List[float]] = []
     for i in range(len(sinusoid_inp)):
@@ -194,6 +193,8 @@ def fixed_pos_embedding(dim=None, seq_len=None):
                 sinusoid_inp[i][j]
             ).evalf() for j in range(len(sinusoid_inp[i]))
         ])
+    logger.info("HF: Returning sin (redacted): " + str(ret_sin[:5]))
+    logger.info("HF: Returning cos (redacted): " + str(ret_cos[:5]))
     return torch.tensor(ret_sin), torch.tensor(ret_cos)
 
 def rotate_every_two(x):
