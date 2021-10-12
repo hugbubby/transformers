@@ -16,7 +16,7 @@
 from abc import ABC
 import inspect
 import math
-import time
+import threading
 from typing import Callable, Iterable, List, Tuple
 
 import numpy as np
@@ -144,6 +144,9 @@ class TemperatureLogitsWarper(LogitsWarper):
         scores = scores / self.temperature
         return scores
 
+def basicLookahead(prompt_ids: List[int], search_ids: List[int]):
+    return 1/(len(search_ids) + 1)
+
 class LogitBiasProcessor(LogitsProcessor):
     r"""
     :class:`transformers.LogitsProcessor` adding bias to specific tokens
@@ -151,15 +154,23 @@ class LogitBiasProcessor(LogitsProcessor):
     Args:
         logit_biases (:obj:`List[Tuple[List[int], float]]`):
             Adds a float bias to the given token's logit.
+        lookahead (:obj:`Callable[[List[int], List[int]], float]`):
+            A function to use to determine the probability of the search_ids (second argument) following the prompt_ids (first argument)
     """
 
-    def __init__(self, logit_bias: List[Tuple[List[int], float]]=[]):
+    def __init__(self, logit_bias: List[Tuple[List[int], float]]=[], lookahead: Callable[[List[int], List[int]], float]=basicLookahead):
         if not isinstance(logit_bias, list) and len(logit_bias) > 0:
             raise ValueError("`logit_bias` has to be a non-empty list")
         self.logit_bias = logit_bias
+        self.lookahead = lookahead
 
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         num_batches = input_ids.shape[0]
+
+        bias_lock = threading.Lock() #Lock held when one thread is requesting a lookahead
+
+        awaited_threads: List[threading.Thread] = []
+
         for logit_bias_instance in self.logit_bias: #NOOOOOO!!! YOU CANT JUST USE FOR LOOPS INSTEAD OF MATRIX MULTIPLICATION!!!!!!!! THE 2NS DELAYSSSS!!!
             toks = logit_bias_instance[0]
             bias = logit_bias_instance[1]
@@ -176,8 +187,20 @@ class LogitBiasProcessor(LogitsProcessor):
                                     correct = False
                                     break
                             if correct:
-                                scores[batch_num][toks[i]] = scores[batch_num][toks[i]] + bias * (0.5 + (i/len(toks))*0.5)
+                                def adjustScore():
+                                    with bias_lock:
+                                        lookahead_toks = toks[i+1:-1]
+                                        lookahead_prob = 1 if len(lookahead_toks) == 0 else self.lookahead(input_ids[batch_num].tolist(), toks[i+1:-1])
+                                        scores[batch_num][toks[i]] = scores[batch_num][toks[i]] + bias * lookahead_prob
+                                adjustmentThread = threading.Thread(target=adjustScore)
+                                adjustmentThread.start()
+                                awaited_threads.append(adjustmentThread)
                             break
+
+        #Wait for score adjustments
+        for t in awaited_threads:
+            t.join()
+
         return scores
 
 

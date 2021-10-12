@@ -588,7 +588,7 @@ class GenerationMixin:
         repetition_penalty_frequency: float,
         repetition_penalty_presence: float,
         repetition_penalty_whitelist: List[int],
-        repetition_penalty_supplemental_blacklist: List[int],
+        repetition_penalty_supplemental_blacklist: List[Tuple[List[int], float]],
         no_repeat_ngram_size: int,
         encoder_no_repeat_ngram_size: int,
         encoder_input_ids: torch.LongTensor,
@@ -652,16 +652,17 @@ class GenerationMixin:
             #This is the most effective way to do this given the state this application is in
             #I'm not kidding
             if repetition_penalty_supplemental_blacklist is not None and len(repetition_penalty_supplemental_blacklist) > 0:
-                whitelist = [i for i in range(100000) if ( # I know, I know
-                    i not in repetition_penalty_supplemental_blacklist
-                )]
-                processors.append(RepetitionPenaltyLogitsProcessor(penalty=(repetition_penalty-1)*rpsb_weight + 1, 
-                    m=repetition_penalty_slope, 
-                    penalize_last=repetition_penalty_range, 
-                    alpha_frequency=repetition_penalty_frequency * rpsb_weight if repetition_penalty_frequency is not None else None, 
-                    alpha_presence=repetition_penalty_presence * rpsb_weight if repetition_penalty_presence is not None else None, 
-                    whitelist=whitelist,
-                ))
+                for blacklist in repetition_penalty_supplemental_blacklist:
+                    whitelist = [i for i in range(100000) if ( # I know, I know
+                        i not in repetition_penalty_supplemental_blacklist[0]
+                    )]
+                    processors.append(RepetitionPenaltyLogitsProcessor(penalty=(repetition_penalty-1)*blacklist[1]+ 1, 
+                        m=repetition_penalty_slope, 
+                        penalize_last=repetition_penalty_range, 
+                        alpha_frequency=repetition_penalty_frequency * rpsb_weight if repetition_penalty_frequency is not None else None, 
+                        alpha_presence=repetition_penalty_presence * rpsb_weight if repetition_penalty_presence is not None else None, 
+                        whitelist=whitelist,
+                    ))
         if no_repeat_ngram_size is not None and no_repeat_ngram_size > 0:
             processors.append(NoRepeatNGramLogitsProcessor(no_repeat_ngram_size))
         if encoder_no_repeat_ngram_size is not None and encoder_no_repeat_ngram_size > 0:

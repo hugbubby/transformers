@@ -15,6 +15,7 @@
 """ PyTorch GPT Neo model. """
 
 
+from functools import lru_cache
 import os
 from typing import List, Tuple
 
@@ -22,7 +23,6 @@ from einops import rearrange, repeat
 import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
-import torch.nn.functional as F
 import torch.utils.checkpoint
 
 from ...activations import ACT2FN
@@ -172,6 +172,7 @@ def to_gpu(x, config):
         return x
 
 #Making this symbolically computed... Trying to debug something
+@lru_cache
 def fixed_pos_embedding(dim=None, seq_len=None):
     import sympy
     logger.info("HF: Running fixed_pos_embedding with dim: " + str(dim))
