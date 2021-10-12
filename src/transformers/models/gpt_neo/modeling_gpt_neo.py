@@ -184,14 +184,14 @@ def fixed_pos_embedding(dim=None, seq_len=None):
     ret_cos: List[List[float]] = []
     for i in range(len(sinusoid_inp)):
         ret_sin.append([
-            sympy.sin(
+            float(sympy.sin(
                 sinusoid_inp[i][j]
-            ).evalf() for j in range(len(sinusoid_inp[i]))
+            ).evalf()) for j in range(len(sinusoid_inp[i]))
         ])
         ret_cos.append([
-            sympy.cos(
+            float(sympy.cos(
                 sinusoid_inp[i][j]
-            ).evalf() for j in range(len(sinusoid_inp[i]))
+            ).evalf()) for j in range(len(sinusoid_inp[i]))
         ])
     logger.info("HF: Returning sin (redacted): " + str(ret_sin[:5]))
     logger.info("HF: Returning cos (redacted): " + str(ret_cos[:5]))
