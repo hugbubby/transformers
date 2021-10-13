@@ -604,7 +604,7 @@ class GenerationMixin:
         num_beam_groups: int,
         diversity_penalty: float,
         remove_invalid_values: bool,
-        rpsb_weight: float = 1.0,
+        logit_bias_lookahead: Optional[Callable[[List[int], List[int]], float]] = None,
     ) -> LogitsProcessorList:
         """
         This class returns a :obj:`~transformers.LogitsProcessorList` list object that contains all relevant
@@ -646,7 +646,7 @@ class GenerationMixin:
                 )
             )
         if logit_bias is not None:
-            processors.append(LogitBiasProcessor(logit_bias))
+            processors.append(LogitBiasProcessor(logit_bias, logit_bias_lookahead))
         if (repetition_penalty is not None and repetition_penalty > 1.0) or (repetition_penalty_frequency is not None and repetition_penalty_frequency > 0.0) or (repetition_penalty_presence is not None and repetition_penalty_presence > 0.0):
             processors.append(RepetitionPenaltyLogitsProcessor(penalty=repetition_penalty, m=repetition_penalty_slope, penalize_last=repetition_penalty_range, alpha_frequency=repetition_penalty_frequency, alpha_presence=repetition_penalty_presence, whitelist=repetition_penalty_whitelist))
             #This is the most effective way to do this given the state this application is in
@@ -659,8 +659,8 @@ class GenerationMixin:
                     processors.append(RepetitionPenaltyLogitsProcessor(penalty=(repetition_penalty-1)*blacklist[1]+ 1, 
                         m=repetition_penalty_slope, 
                         penalize_last=repetition_penalty_range, 
-                        alpha_frequency=repetition_penalty_frequency * rpsb_weight if repetition_penalty_frequency is not None else None, 
-                        alpha_presence=repetition_penalty_presence * rpsb_weight if repetition_penalty_presence is not None else None, 
+                        alpha_frequency=repetition_penalty_frequency * blacklist[1] if repetition_penalty_frequency is not None else None, 
+                        alpha_presence=repetition_penalty_presence * blacklist[1] if repetition_penalty_presence is not None else None, 
                         whitelist=whitelist,
                     ))
         if no_repeat_ngram_size is not None and no_repeat_ngram_size > 0:
