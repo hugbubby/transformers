@@ -189,7 +189,6 @@ class LogitBiasProcessor(LogitsProcessor):
                     adjustmentThread.start()
                     awaited_threads.append(adjustmentThread)
 
-                modified = False
                 for i in range(len(toks)-1, -1, -1):
                     if input_ids[batch_num][-1] == toks[i]:
                         correct = True
@@ -198,24 +197,20 @@ class LogitBiasProcessor(LogitsProcessor):
                                 correct = False
                                 break
                         if correct:
-                            modified = True
                             adjustScore(i)
                         break
-                if not modified:
-                    adjustScore(0)
-
 
         #Wait for score adjustments
         for t in awaited_threads:
             t.join()
         
-        for i in range(len(scores)):
-            logger.info("HF: [LB]: Latest inputs: ", str(input_ids[i][-5:]))
-            batch_scores = scores[i]
-            batch_init_scores = init_scores[i]
-            for j in range(len(scores)):
-                if batch_scores[j] != batch_init_scores[j]:
-                    logger.info("HF: [LB]: Token " + str(j) + ", Bias: " + str(batch_scores[j] - batch_init_scores[j]))
+        for batch in range(num_batches):
+            logger.info("HF: [LB]: Latest inputs (batch " + str(batch) + "): " + str(input_ids[i][-5:].tolist()))
+            batch_scores = scores[batch]
+            batch_init_scores = init_scores[batch]
+            for tok_id in range(len(batch_scores)):
+                if batch_scores[tok_id] != batch_init_scores[tok_id]:
+                    logger.info("HF: [LB]: Token " + str(tok_id) + ", Bias: " + str(batch_scores[tok_id] - batch_init_scores[tok_id]))
 
         return scores
 
