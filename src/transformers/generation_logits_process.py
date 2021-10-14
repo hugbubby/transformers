@@ -167,7 +167,7 @@ class LogitBiasProcessor(LogitsProcessor):
             self.lookahead = lookahead
 
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-        import time
+        import time, datetime
         startedAt = time.perf_counter()
 
         num_batches = input_ids.shape[0]
@@ -178,8 +178,16 @@ class LogitBiasProcessor(LogitsProcessor):
         
         def adjustScore(tok: int, lookahead_toks: List[int], batch_num: int):
             def _adjustScore():
+                lStartedAt = time.perf_counter()
                 lookahead_prob = 1 if len(lookahead_toks) == 0 else self.lookahead(input_ids[batch_num].tolist() + [tok], lookahead_toks)
-                logger.info("HF: [LB]: Prob of toks " + str(lookahead_toks) + " for batch " + str(batch_num) + ": " + str(lookahead_prob))
+                logger.info("HF: [LB]: Prob of toks " + 
+                        str(lookahead_toks) + 
+                        " for batch " + 
+                        str(batch_num) + 
+                        " retrieved in " + 
+                        str(datetime.timedelta(seconds=(time.perf_counter() - lStartedAt))) +
+                        ": " + str(lookahead_prob))
+
                 with bias_lock:
                     scores[batch_num][tok] = scores[batch_num][tok] + (bias * lookahead_prob)
 
@@ -213,7 +221,6 @@ class LogitBiasProcessor(LogitsProcessor):
                 if batch_scores[tok_id] != batch_init_scores[tok_id]:
                     logger.info("HF: [LB]: Token " + str(tok_id) + ", Bias: " + str(batch_scores[tok_id] - batch_init_scores[tok_id]))
 
-        import datetime
         logger.info("HF: [LB]: Func took " + str(datetime.timedelta(seconds=(time.perf_counter() - startedAt))))
         return scores
 
