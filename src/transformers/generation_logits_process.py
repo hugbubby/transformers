@@ -17,7 +17,7 @@ from abc import ABC
 import inspect
 import math
 import threading
-from typing import Callable, Iterable, List, Tuple
+from typing import Callable, Iterable, List, Optional, Tuple
 
 import numpy as np
 import requests
@@ -158,11 +158,14 @@ class LogitBiasProcessor(LogitsProcessor):
             A function to use to determine the probability of the search_ids (second argument) following the prompt_ids (first argument)
     """
 
-    def __init__(self, logit_bias: List[Tuple[List[int], float]]=[], lookahead: Callable[[List[int], List[int]], float]=basicLookahead):
+    def __init__(self, logit_bias: List[Tuple[List[int], float]]=[], lookahead: Optional[Callable[[List[int], List[int]], float]]=None):
         if not isinstance(logit_bias, list) and len(logit_bias) > 0:
             raise ValueError("`logit_bias` has to be a non-empty list")
         self.logit_bias = logit_bias
-        self.lookahead = lookahead
+        if lookahead is None:
+            self.lookahead = basicLookahead
+        else:
+            self.lookahead = lookahead
 
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         num_batches = input_ids.shape[0]
