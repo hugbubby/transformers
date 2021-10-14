@@ -991,10 +991,8 @@ class GPTNeoForCausalLM(GPTNeoPreTrainedModel):
             ``labels = input_ids`` Indices are selected in ``[-100, 0, ..., config.vocab_size]`` All labels set to
             ``-100`` are ignored (masked), the loss is only computed for labels in ``[0, ..., config.vocab_size]``
         """
-        logger.info("HF: Calling forward on GPT Neo")
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        logger.info("HF: Running self.transformer on GPT Neo forward")
         transformer_outputs = self.transformer(
             input_ids,
             past_key_values=past_key_values,
@@ -1010,10 +1008,8 @@ class GPTNeoForCausalLM(GPTNeoPreTrainedModel):
             embs=embs,
         )
         hidden_states = transformer_outputs[0]
-        logger.info("HF: Assigned hidden states from self.transformer on GPT Neo forward")
 
         lm_logits = self.lm_head(hidden_states).float()
-        logger.info("HF: Assigned logits from hidden states on GPT Neo forward")
 
         loss = None
         if labels is not None:
@@ -1035,7 +1031,6 @@ class GPTNeoForCausalLM(GPTNeoPreTrainedModel):
             output = (lm_logits,) + transformer_outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
-        logger.info("HF: Getting causal lm output with past on gpt neo")
         ret = CausalLMOutputWithPast(
             loss=loss,
             logits=lm_logits,
@@ -1043,7 +1038,6 @@ class GPTNeoForCausalLM(GPTNeoPreTrainedModel):
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
-        logger.info("HF: Exiting forward on GPT Neo")
         return ret
 
     @staticmethod
