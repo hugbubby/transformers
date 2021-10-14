@@ -604,7 +604,7 @@ class GenerationMixin:
         num_beam_groups: int,
         diversity_penalty: float,
         remove_invalid_values: bool,
-        logit_bias_lookahead: Optional[Callable[[List[int], List[int]], float]] = None,
+        logit_bias_lookahead: Callable[[List[int], List[int]], float],
     ) -> LogitsProcessorList:
         """
         This class returns a :obj:`~transformers.LogitsProcessorList` list object that contains all relevant

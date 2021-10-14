@@ -143,9 +143,6 @@ class TemperatureLogitsWarper(LogitsWarper):
         scores = scores / self.temperature
         return scores
 
-def basicLookahead(prompt_ids: List[int], search_ids: List[int]):
-    return 1/(len(search_ids) + 1)
-
 class LogitBiasProcessor(LogitsProcessor):
     r"""
     :class:`transformers.LogitsProcessor` adding bias to specific tokens
@@ -157,14 +154,11 @@ class LogitBiasProcessor(LogitsProcessor):
             A function to use to determine the probability of the search_ids (second argument) following the prompt_ids (first argument)
     """
 
-    def __init__(self, logit_bias: List[Tuple[List[int], float]]=[], lookahead: Optional[Callable[[List[int], List[int]], float]]=None):
+    def __init__(self, logit_bias: List[Tuple[List[int], float]], lookahead: Callable[[List[int], List[int]], float]):
         if not isinstance(logit_bias, list) and len(logit_bias) > 0:
             raise ValueError("`logit_bias` has to be a non-empty list")
         self.logit_bias = logit_bias
-        if lookahead is None:
-            self.lookahead = basicLookahead
-        else:
-            self.lookahead = lookahead
+        self.lookahead = lookahead
 
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         import time, datetime
@@ -174,7 +168,6 @@ class LogitBiasProcessor(LogitsProcessor):
         bias_lock = threading.Lock() #Lock held when one thread is requesting a lookahead
 
         awaited_threads: List[threading.Thread] = []
-        init_scores = scores.clone().detach()
         
         def adjustScore(tok: int, lookahead_toks: List[int], batch_num: int):
             def _adjustScore():
@@ -212,15 +205,6 @@ class LogitBiasProcessor(LogitsProcessor):
         #Wait for score adjustments
         for t in awaited_threads:
             t.join()
-        
-        for batch in range(num_batches):
-            logger.info("HF: [LB]: Latest inputs (batch " + str(batch) + "): " + str(input_ids[batch][-5:].tolist()))
-            batch_scores = scores[batch]
-            batch_init_scores = init_scores[batch]
-            for tok_id in range(len(batch_scores)):
-                if batch_scores[tok_id] != batch_init_scores[tok_id]:
-                    logger.info("HF: [LB]: Token " + str(tok_id) + ", Bias: " + str(batch_scores[tok_id] - batch_init_scores[tok_id]))
-
         logger.info("HF: [LB]: Func took " + str(datetime.timedelta(seconds=(time.perf_counter() - startedAt))))
         return scores
 
