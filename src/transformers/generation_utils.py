@@ -646,7 +646,7 @@ class GenerationMixin:
                 )
             )
         if logit_bias is not None:
-            processors.append(LogitBiasProcessor(logit_bias, lookahead=logit_bias_lookahead))
+            processors.append(LogitBiasProcessor(logit_bias, logit_bias_lookahead))
         if (repetition_penalty is not None and repetition_penalty > 1.0) or (repetition_penalty_frequency is not None and repetition_penalty_frequency > 0.0) or (repetition_penalty_presence is not None and repetition_penalty_presence > 0.0):
             processors.append(RepetitionPenaltyLogitsProcessor(penalty=repetition_penalty, m=repetition_penalty_slope, penalize_last=repetition_penalty_range, alpha_frequency=repetition_penalty_frequency, alpha_presence=repetition_penalty_presence, whitelist=repetition_penalty_whitelist))
             #This is the most effective way to do this given the state this application is in
