@@ -175,33 +175,31 @@ class LogitBiasProcessor(LogitsProcessor):
 
         awaited_threads: List[threading.Thread] = []
         init_scores = scores.clone().detach()
+        
+        def adjustScore(tok: int, lookahead_toks: List[int], batch_num: int):
+            def _adjustScore():
+                lookahead_prob = 1 if len(lookahead_toks) == 0 else self.lookahead(input_ids[batch_num].tolist() + [tok], lookahead_toks)
+                logger.info("HF: [LB]: Prob of toks " + str(lookahead_toks) + " for batch " + str(batch) + ": " + str(lookahead_prob))
+                with bias_lock:
+                    scores[batch_num][tok] = scores[batch_num][tok] + (bias * lookahead_prob)
+
+            adjustmentThread = threading.Thread(target=_adjustScore)
+            adjustmentThread.start()
+            awaited_threads.append(adjustmentThread)
 
         for logit_bias_instance in self.logit_bias: #NOOOOOO!!! YOU CANT JUST USE FOR LOOPS INSTEAD OF MATRIX MULTIPLICATION!!!!!!!! THE 2NS DELAYSSSS!!!
             toks = logit_bias_instance[0]
             bias = logit_bias_instance[1]
             for batch_num in range(num_batches):
-                def adjustScore(i: int):
-                    def _adjustScore():
-                        with bias_lock:
-                            lookahead_toks = toks[i+1:]
-                            lookahead_prob = 1 if len(lookahead_toks) == 0 else self.lookahead(input_ids[batch_num].tolist() + [toks[i]], lookahead_toks)
-                            scores[batch_num][toks[i]] = scores[batch_num][toks[i]] + (bias * lookahead_prob)
-
-                    adjustmentThread = threading.Thread(target=_adjustScore)
-                    adjustmentThread.start()
-                    awaited_threads.append(adjustmentThread)
-
                 found_unfinished_sequence = False
-                for i in range(1,len(toks)):
+                for i in range(len(toks)-1, 0, -1):
                     if input_ids[batch_num][-i:] == toks[:i]:
-                        adjustScore(i)
+                        adjustScore(toks[i], toks[i:], batch_num)
                         found_unfinished_sequence = True
                         break
 
                 if not found_unfinished_sequence:
-                    adjustScore(0)
-
-
+                    adjustScore(toks[0], toks[0:], batch_num)
 
         #Wait for score adjustments
         for t in awaited_threads:
