@@ -723,6 +723,7 @@ class GenerationMixin:
         repetition_penalty_supplemental_blacklist: List[int] = None, #Adds an additional repetition penalty to a set of characters. 
         bad_words_ids: Optional[Iterable[int]] = None,
         logit_bias: Optional[List[Tuple[List[int], float]]] = None,
+        logit_bias_lookahead: Optional[Callable[[List[int], List[int]], float]] = None,
         bos_token_id: Optional[int] = None,
         pad_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = None,
@@ -1031,6 +1032,7 @@ class GenerationMixin:
             encoder_no_repeat_ngram_size=encoder_no_repeat_ngram_size,
             encoder_input_ids=encoder_input_ids,
             logit_bias=logit_bias,
+            logit_bias_lookahead=logit_bias_lookahead,
             bad_words_ids=bad_words_ids,
             min_length=min_length,
             max_length=max_length,
