@@ -179,7 +179,7 @@ class LogitBiasProcessor(LogitsProcessor):
         def adjustScore(tok: int, lookahead_toks: List[int], batch_num: int):
             def _adjustScore():
                 lookahead_prob = 1 if len(lookahead_toks) == 0 else self.lookahead(input_ids[batch_num].tolist() + [tok], lookahead_toks)
-                logger.info("HF: [LB]: Prob of toks " + str(lookahead_toks) + " for batch " + str(batch) + ": " + str(lookahead_prob))
+                logger.info("HF: [LB]: Prob of toks " + str(lookahead_toks) + " for batch " + str(batch_num) + ": " + str(lookahead_prob))
                 with bias_lock:
                     scores[batch_num][tok] = scores[batch_num][tok] + (bias * lookahead_prob)
 
