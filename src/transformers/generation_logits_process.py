@@ -181,24 +181,25 @@ class LogitBiasProcessor(LogitsProcessor):
                 def adjustScore(i: int):
                     def _adjustScore():
                         with bias_lock:
-                            lookahead_toks = toks[i+1:-1]
-                            lookahead_prob = 1 if len(lookahead_toks) == 0 else self.lookahead(input_ids[batch_num].tolist(), toks[i+1:-1])
+                            lookahead_toks = toks[i+1:]
+                            lookahead_prob = 1 if len(lookahead_toks) == 0 else self.lookahead(input_ids[batch_num].tolist(), toks[i+1:])
                             scores[batch_num][toks[i]] = scores[batch_num][toks[i]] + (bias * lookahead_prob)
 
-                    adjustmentThread = threading.Thread(target=_adjustScore, args=[i])
+                    adjustmentThread = threading.Thread(target=_adjustScore)
                     adjustmentThread.start()
                     awaited_threads.append(adjustmentThread)
 
-                for i in range(len(toks)-1, -1, -1):
-                    if input_ids[batch_num][-1] == toks[i]:
-                        correct = True
-                        for j in range(len(toks[:i])):
-                            if input_ids[batch_num][-1-(i-j)] != toks[j]:
-                                correct = False
-                                break
-                        if correct:
-                            adjustScore(i)
+                found_unfinished_sequence = False
+                for i in range(1,len(toks)):
+                    if input_ids[batch_num][-i:] == toks[:i]:
+                        adjustScore(i)
+                        found_unfinished_sequence = True
                         break
+
+                if not found_unfinished_sequence:
+                    adjustScore(0)
+
+
 
         #Wait for score adjustments
         for t in awaited_threads:
