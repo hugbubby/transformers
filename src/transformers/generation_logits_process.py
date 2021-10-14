@@ -20,7 +20,6 @@ import threading
 from typing import Callable, Iterable, List, Optional, Tuple
 
 import numpy as np
-import requests
 import torch
 
 from .file_utils import add_start_docstrings
@@ -168,6 +167,9 @@ class LogitBiasProcessor(LogitsProcessor):
             self.lookahead = lookahead
 
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        import time
+        startedAt = time.perf_counter()
+
         num_batches = input_ids.shape[0]
         bias_lock = threading.Lock() #Lock held when one thread is requesting a lookahead
 
@@ -182,8 +184,10 @@ class LogitBiasProcessor(LogitsProcessor):
                     def _adjustScore():
                         with bias_lock:
                             lookahead_toks = toks[i+1:]
-                            lookahead_prob = 1 if len(lookahead_toks) == 0 else self.lookahead(input_ids[batch_num].tolist(), toks[i+1:])
-                            scores[batch_num][toks[i]] = scores[batch_num][toks[i]] + (bias * lookahead_prob)
+                            lookahead_prob = 1 if len(lookahead_toks) == 0 else self.lookahead(input_ids[batch_num].tolist() + [toks[i]], lookahead_toks)
+                            batch_scores = scores[batch_num]
+                            batch_scores[toks[i]] = batch_scores[toks[i]] + (bias * lookahead_prob)
+                            scores[batch_num] = batch_scores
 
                     adjustmentThread = threading.Thread(target=_adjustScore)
                     adjustmentThread.start()
@@ -213,6 +217,8 @@ class LogitBiasProcessor(LogitsProcessor):
                 if batch_scores[tok_id] != batch_init_scores[tok_id]:
                     logger.info("HF: [LB]: Token " + str(tok_id) + ", Bias: " + str(batch_scores[tok_id] - batch_init_scores[tok_id]))
 
+        import datetime
+        logger.info("HF: [LB]: Func took " + str(datetime.timedelta(seconds=(time.perf_counter() - startedAt))))
         return scores
 
 
