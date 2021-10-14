@@ -174,7 +174,7 @@ class LogitBiasProcessor(LogitsProcessor):
         bias_lock = threading.Lock() #Lock held when one thread is requesting a lookahead
 
         awaited_threads: List[threading.Thread] = []
-        init_scores = scores.clone()
+        init_scores = scores.clone().detach()
 
         for logit_bias_instance in self.logit_bias: #NOOOOOO!!! YOU CANT JUST USE FOR LOOPS INSTEAD OF MATRIX MULTIPLICATION!!!!!!!! THE 2NS DELAYSSSS!!!
             toks = logit_bias_instance[0]
@@ -185,9 +185,7 @@ class LogitBiasProcessor(LogitsProcessor):
                         with bias_lock:
                             lookahead_toks = toks[i+1:]
                             lookahead_prob = 1 if len(lookahead_toks) == 0 else self.lookahead(input_ids[batch_num].tolist() + [toks[i]], lookahead_toks)
-                            batch_scores = scores[batch_num]
-                            batch_scores[toks[i]] = batch_scores[toks[i]] + (bias * lookahead_prob)
-                            scores[batch_num] = batch_scores
+                            scores[batch_num][toks[i]] = scores[batch_num][toks[i]] + (bias * lookahead_prob)
 
                     adjustmentThread = threading.Thread(target=_adjustScore)
                     adjustmentThread.start()
