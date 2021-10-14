@@ -173,6 +173,7 @@ class LogitBiasProcessor(LogitsProcessor):
         bias_lock = threading.Lock() #Lock held when one thread is requesting a lookahead
 
         awaited_threads: List[threading.Thread] = []
+        init_scores = scores.clone()
 
         for logit_bias_instance in self.logit_bias: #NOOOOOO!!! YOU CANT JUST USE FOR LOOPS INSTEAD OF MATRIX MULTIPLICATION!!!!!!!! THE 2NS DELAYSSSS!!!
             toks = logit_bias_instance[0]
@@ -182,6 +183,7 @@ class LogitBiasProcessor(LogitsProcessor):
                     scores[batch_num][toks[0]] = scores[batch_num][toks[0]] + bias
             else:
                 for batch_num in range(input_ids.shape[0]):
+                    found = False
                     for i in range(len(toks)-1):
                         if input_ids[batch_num][-1] == toks[i]:
                             correct = True
@@ -190,19 +192,42 @@ class LogitBiasProcessor(LogitsProcessor):
                                     correct = False
                                     break
                             if correct:
+                                found = True
                                 def adjustScore():
                                     with bias_lock:
                                         lookahead_toks = toks[i+1:-1]
                                         lookahead_prob = 1 if len(lookahead_toks) == 0 else self.lookahead(input_ids[batch_num].tolist(), toks[i+1:-1])
-                                        scores[batch_num][toks[i]] = scores[batch_num][toks[i]] + bias * lookahead_prob
+                                        scores[batch_num][toks[i]] = scores[batch_num][toks[i]] + (bias * lookahead_prob)
                                 adjustmentThread = threading.Thread(target=adjustScore)
                                 adjustmentThread.start()
                                 awaited_threads.append(adjustmentThread)
                             break
 
+                    if found == True:
+                        break
+                    else:
+                        def adjustScore():
+                            with bias_lock:
+                                lookahead_toks = toks[1:-1]
+                                lookahead_prob = 1 if len(lookahead_toks) == 0 else self.lookahead(input_ids[batch_num].tolist(), toks[1:-1])
+                                scores[batch_num][toks[0]] = scores[batch_num][toks[0]] + (bias * lookahead_prob)
+                        adjustmentThread = threading.Thread(target=adjustScore)
+                        adjustmentThread.start()
+                        awaited_threads.append(adjustmentThread)
+
+
+
         #Wait for score adjustments
         for t in awaited_threads:
             t.join()
+        
+        for i in range(len(scores)):
+            logger.info("HF: [LB]: Latest inputs: ", str(input_ids[i][-5:]))
+            batch_scores = scores[i]
+            batch_init_scores = init_scores[i]
+            for j in range(len(scores)):
+                if batch_scores[j] != batch_init_scores[j]:
+                    logger.info("HF: [LB]: Token " + str(batch_scores[j]) + ", Bias: " + str(batch_scores[j] - batch_init_scores[j]))
 
         return scores
 
