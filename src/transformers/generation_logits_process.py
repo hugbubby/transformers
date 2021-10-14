@@ -206,7 +206,7 @@ class LogitBiasProcessor(LogitsProcessor):
             t.join()
         
         for batch in range(num_batches):
-            logger.info("HF: [LB]: Latest inputs (batch " + str(batch) + "): " + str(input_ids[i][-5:].tolist()))
+            logger.info("HF: [LB]: Latest inputs (batch " + str(batch) + "): " + str(input_ids[batch][-5:].tolist()))
             batch_scores = scores[batch]
             batch_init_scores = init_scores[batch]
             for tok_id in range(len(batch_scores)):
