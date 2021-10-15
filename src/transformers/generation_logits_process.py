@@ -162,8 +162,6 @@ class LogitBiasProcessor(LogitsProcessor):
 
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         import time, datetime
-        startedAt = time.perf_counter()
-
         num_batches = input_ids.shape[0]
         bias_lock = threading.Lock() #Lock held when one thread is requesting a lookahead
 
@@ -175,8 +173,8 @@ class LogitBiasProcessor(LogitsProcessor):
                 lookahead_prob = 1 if len(lookahead_toks) == 0 else self.lookahead(input_ids[batch_num].tolist() + [tok], lookahead_toks)
                 logger.info("HF: [LB]: Prob of toks " + 
                         str(lookahead_toks) + 
-                        " for batch " + 
-                        str(batch_num) + 
+                        " after " + 
+                        str(input_ids[batch_num].tolist()[-10:] + [tok]) + 
                         " retrieved in " + 
                         str(datetime.timedelta(seconds=(time.perf_counter() - lStartedAt))) +
                         ": " + str(lookahead_prob))
@@ -194,7 +192,7 @@ class LogitBiasProcessor(LogitsProcessor):
             for batch_num in range(num_batches):
                 found_unfinished_sequence = False
                 for i in range(len(toks)-1, 0, -1):
-                    if input_ids[batch_num][-i:] == toks[:i]:
+                    if input_ids[batch_num][-i:].tolist() == toks[:i]:
                         adjustScore(toks[i], toks[i+1:], batch_num)
                         found_unfinished_sequence = True
                         break
@@ -205,7 +203,6 @@ class LogitBiasProcessor(LogitsProcessor):
         #Wait for score adjustments
         for t in awaited_threads:
             t.join()
-        logger.info("HF: [LB]: Func took " + str(datetime.timedelta(seconds=(time.perf_counter() - startedAt))))
         return scores
 
 
