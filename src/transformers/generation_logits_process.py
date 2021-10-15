@@ -166,6 +166,8 @@ class LogitBiasProcessor(LogitsProcessor):
         bias_lock = threading.Lock() #Lock held when one thread is requesting a lookahead
 
         awaited_threads: List[threading.Thread] = []
+
+        init_scores = scores.clone().detach()
         
         def adjustScore(tok: int, lookahead_toks: List[int], batch_num: int):
             def _adjustScore():
@@ -203,6 +205,12 @@ class LogitBiasProcessor(LogitsProcessor):
         #Wait for score adjustments
         for t in awaited_threads:
             t.join()
+
+        for batch_num in range(num_batches):
+            for tok_index in range(len(init_scores[batch_num])):
+                if scores[batch_num][tok_index] != init_scores[batch_num][tok_index]:
+                    logger.info("HF: [LB]: Batch " + str(batch_num) + "'s token "+ str(tok_index) + " has bias " + str(scores[batch_num]))
+
         return scores
 
 
