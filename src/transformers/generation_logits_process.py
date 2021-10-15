@@ -195,12 +195,12 @@ class LogitBiasProcessor(LogitsProcessor):
                 found_unfinished_sequence = False
                 for i in range(len(toks)-1, 0, -1):
                     if input_ids[batch_num][-i:] == toks[:i]:
-                        adjustScore(toks[i], toks[i:], batch_num)
+                        adjustScore(toks[i], toks[i+1:], batch_num)
                         found_unfinished_sequence = True
                         break
 
                 if not found_unfinished_sequence:
-                    adjustScore(toks[0], toks[0:], batch_num)
+                    adjustScore(toks[0], toks[1:], batch_num)
 
         #Wait for score adjustments
         for t in awaited_threads:
