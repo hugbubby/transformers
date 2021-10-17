@@ -17,7 +17,7 @@ from abc import ABC
 import inspect
 import math
 import threading
-from typing import Callable, Iterable, List, Optional, Tuple
+from typing import Any, Callable, Iterable, List, Optional, Tuple
 
 import numpy as np
 import torch
@@ -154,55 +154,82 @@ class LogitBiasProcessor(LogitsProcessor):
             A function to use to determine the probability of the search_ids (second argument) following the prompt_ids (first argument)
     """
 
-    def __init__(self, logit_bias: List[Tuple[List[int], float]], lookahead: Callable[[List[int], List[int]], float]):
+    def __init__(self, logit_bias: List[Tuple[List[int], float]], lookahead: Callable[[Any, torch.LongTensor], torch.Tensor]):
         if not isinstance(logit_bias, list) and len(logit_bias) > 0:
             raise ValueError("`logit_bias` has to be a non-empty list")
         self.logit_bias = logit_bias
         self.lookahead = lookahead
 
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-        import time, datetime
-        num_batches = input_ids.shape[0]
-        bias_lock = threading.Lock() #Lock held when one thread is requesting a lookahead
+        import time
+        
+        x = time.perf_counter()
 
-        awaited_threads: List[threading.Thread] = []
+        input_ids_ls = input_ids.tolist()
+        input_ids_ls = list(filter(lambda ls: ls[-1] != 50256, input_ids_ls)) #no need to logit bias for ended sequences
+        
+        num_batches = len(input_ids_ls)
+        
+        
+        logger.info("[HF]: [LBP]: Time to ls: " + str(time.perf_counter() - x))
 
-        def adjustScore(tok: int, lookahead_toks: List[int], batch_num: int):
-            def _adjustScore():
-                lStartedAt = time.perf_counter()
-                lookahead_prob = 1 if len(lookahead_toks) == 0 else self.lookahead(input_ids[batch_num].tolist() + [tok], lookahead_toks)
-                logger.info("HF: [LB]: Prob of toks " + 
-                        str(lookahead_toks) + 
-                        " after " + 
-                        str(input_ids[batch_num].tolist()[-10:] + [tok]) + 
-                        " retrieved in " + 
-                        str(datetime.timedelta(seconds=(time.perf_counter() - lStartedAt))) +
-                        ": " + str(lookahead_prob))
+        x = time.perf_counter()
+        lookahead_input_ids: List[List[List[List[int]]]] = [] #(num_requested_batches, num_biased_phrases, num_lookaheads_needed_for_phrase, num_input_ids)
+        
+        lookahead_tokens: List[int] = [] #(num_lookaheads)
+        lookahead_for: List[int] = []#(num_biased_phrases)
 
-                with bias_lock:
-                    scores[batch_num][tok] = scores[batch_num][tok] + (bias * lookahead_prob)
+        for batch_num in range(num_batches):
+            batch_input = input_ids_ls[batch_num]
+            batch_lookahead_input_ids: List[List[List[int]]] = [] #(num_biased_phrases, num_lookaheads_needed_for_phrase, input_ids)
+            for logit_bias_instance in self.logit_bias: #NOOOOOO!!! YOU CANT JUST USE FOR LOOPS INSTEAD OF MATRIX MULTIPLICATION!!!!!!!! THE 2NS DELAYSSSS!!!
+                phrase = logit_bias_instance[0]
+                if len(phrase) == 1 or batch_input[-(len(phrase)-1):] == phrase[:-1]: #If the the phrase just needs one more token, there's no adjustment
+                    scores[batch_num][phrase[-1]] += logit_bias_instance[1]
+                else:
+                    for i in range(len(phrase)-2, -1, -1): #Find the amount of tokens >1 to complete the phrase, then do lookahead for those
+                        if i == 0 or batch_input[-i:] == phrase[:i]:
+                            batch_lookahead_input_ids.append([
+                                batch_input + [phrase[i+j]] for j in range(len(phrase)-1-i)
+                            ])
+                            lookahead_tokens.extend(phrase[i+1:])
+                            lookahead_for.append(phrase[i])
+                            break
+            lookahead_input_ids.append(batch_lookahead_input_ids)
 
-            adjustmentThread = threading.Thread(target=_adjustScore)
-            adjustmentThread.start()
-            awaited_threads.append(adjustmentThread)
+        if len(lookahead_tokens) > 0:
+            flattened_lookahead_ids: List[List[int]]  = []
+            attention_ids:  List[List[int]] = []
 
-        for logit_bias_instance in self.logit_bias: #NOOOOOO!!! YOU CANT JUST USE FOR LOOPS INSTEAD OF MATRIX MULTIPLICATION!!!!!!!! THE 2NS DELAYSSSS!!!
-            toks = logit_bias_instance[0]
-            bias = logit_bias_instance[1]
-            for batch_num in range(num_batches):
-                found_unfinished_sequence = False
-                for i in range(len(toks)-1, 0, -1):
-                    if input_ids[batch_num][-i:].tolist() == toks[:i]:
-                        adjustScore(toks[i], toks[i+1:], batch_num)
-                        found_unfinished_sequence = True
-                        break
+            for batch_lookahead_input_ids in lookahead_input_ids:
+                for phrase_lookahead_input_ids in batch_lookahead_input_ids:
+                    for token_lookahead_input_ids in phrase_lookahead_input_ids:
+                        token_lookahead_input_ids = token_lookahead_input_ids[-64:]
+                        attention_ids.append([0] * (64-len(token_lookahead_input_ids)) + [1] * len(token_lookahead_input_ids))
+                        flattened_lookahead_ids.append([50256] * (64-len(token_lookahead_input_ids)) + token_lookahead_input_ids)
 
-                if not found_unfinished_sequence:
-                    adjustScore(toks[0], toks[1:], batch_num)
+            logger.info("[HF]: [LBP]: Performing: " + str(len(flattened_lookahead_ids)) + " lookaheads")
+            x = time.perf_counter()
+            p0 = {"input_ids":torch.tensor(flattened_lookahead_ids, device=input_ids.device), "attention_mask":torch.tensor(attention_ids, device=input_ids.device)}
+            p1 = torch.tensor(lookahead_tokens, device=input_ids.device)
+            x = time.perf_counter()
+            lookahead_results = self.lookahead(p0, p1)
+            logger.info("[HF]: [LBP]: Time to model: " + str(time.perf_counter() - x))
+            
+            x = time.perf_counter()
+            lookahead_result_index = 0
+            for batch_index in range(num_batches):
+                phrase_index = 0
+                for phrase_lookahead_input_ids in lookahead_input_ids[batch_index]:
+                    prob = torch.prod(
+                        lookahead_results[
+                            lookahead_result_index:lookahead_result_index+len(phrase_lookahead_input_ids)
+                        ]
+                    )
+                    scores[batch_index][lookahead_for[phrase_index]] += prob.mul(self.logit_bias[phrase_index][1])
+                    lookahead_result_index += len(phrase_lookahead_input_ids)
+                    phrase_index += 1
 
-        #Wait for score adjustments
-        for t in awaited_threads:
-            t.join()
         return scores
 
 
