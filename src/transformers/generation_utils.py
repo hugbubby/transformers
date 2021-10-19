@@ -32,7 +32,6 @@ from .generation_logits_process import (
     ForcedEOSTokenLogitsProcessor,
     HammingDiversityLogitsProcessor,
     InfNanRemoveLogitsProcessor,
-    LogitBiasProcessor,
     LogitsProcessorList,
     MinLengthLogitsProcessor,
     NoBadWordsLogitsProcessor,
@@ -593,7 +592,6 @@ class GenerationMixin:
         encoder_no_repeat_ngram_size: int,
         encoder_input_ids: torch.LongTensor,
         bad_words_ids: List[List[int]],
-        logit_bias: List[Tuple[List[int], float]],
         min_length: int,
         max_length: int,
         eos_token_id: int,
@@ -604,7 +602,6 @@ class GenerationMixin:
         num_beam_groups: int,
         diversity_penalty: float,
         remove_invalid_values: bool,
-        logit_bias_lookahead: Callable[[List[int], List[int]], float],
     ) -> LogitsProcessorList:
         """
         This class returns a :obj:`~transformers.LogitsProcessorList` list object that contains all relevant
@@ -645,8 +642,6 @@ class GenerationMixin:
                     diversity_penalty=diversity_penalty, num_beams=num_beams, num_beam_groups=num_beam_groups
                 )
             )
-        if logit_bias is not None:
-            processors.append(LogitBiasProcessor(logit_bias, logit_bias_lookahead))
         if (repetition_penalty is not None and repetition_penalty > 1.0) or (repetition_penalty_frequency is not None and repetition_penalty_frequency > 0.0) or (repetition_penalty_presence is not None and repetition_penalty_presence > 0.0):
             processors.append(RepetitionPenaltyLogitsProcessor(penalty=repetition_penalty, m=repetition_penalty_slope, penalize_last=repetition_penalty_range, alpha_frequency=repetition_penalty_frequency, alpha_presence=repetition_penalty_presence, whitelist=repetition_penalty_whitelist))
             #This is the most effective way to do this given the state this application is in
@@ -722,8 +717,7 @@ class GenerationMixin:
         repetition_penalty_whitelist: List[int] = None,
         repetition_penalty_supplemental_blacklist: List[int] = None, #Adds an additional repetition penalty to a set of characters. 
         bad_words_ids: Optional[Iterable[int]] = None,
-        logit_bias: Optional[List[Tuple[List[int], float]]] = None,
-        logit_bias_lookahead: Optional[Callable[[List[int], List[int]], float]] = None,
+        logit_bias_lookahead: Optional[Callable[[List[Tuple[List[int], float]], torch.LongTensor, int], Callable[[],torch.Tensor]]] = None,
         bos_token_id: Optional[int] = None,
         pad_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = None,
@@ -1031,8 +1025,6 @@ class GenerationMixin:
             no_repeat_ngram_size=no_repeat_ngram_size,
             encoder_no_repeat_ngram_size=encoder_no_repeat_ngram_size,
             encoder_input_ids=encoder_input_ids,
-            logit_bias=logit_bias,
-            logit_bias_lookahead=logit_bias_lookahead,
             bad_words_ids=bad_words_ids,
             min_length=min_length,
             max_length=max_length,
@@ -1086,6 +1078,7 @@ class GenerationMixin:
             return self.sample(
                 input_ids,
                 logits_processor=logits_processor,
+                logit_bias_lookahead=logit_bias_lookahead,
                 logits_warper=logits_warper,
                 stopping_criteria=stopping_criteria,
                 pad_token_id=pad_token_id,
@@ -1466,6 +1459,8 @@ class GenerationMixin:
         output_hidden_states: Optional[bool] = None,
         output_scores: Optional[bool] = None,
         output_nonzero_probs: Optional[bool] = None,
+        logit_bias: Optional[List[Tuple[List[int], float]]] = None,
+        logit_bias_lookahead: Optional[Callable[[List[Tuple[List[int], float]], torch.LongTensor, int], Callable[[],torch.Tensor]]] = None,
         return_dict_in_generate: Optional[bool] = None,
         synced_gpus: Optional[bool] = None,
         embs: Optional[List[Tuple[int, torch.FloatTensor]]] = None,
@@ -1617,6 +1612,11 @@ class GenerationMixin:
                 if this_peer_finished_flag.item() == 0.0:
                     break
 
+
+            scoreAddition: Optional[Callable[[],torch.Tensor]] = None #We have to 'await' the result, just starting it now
+            if logit_bias is not None and logit_bias_lookahead is not None:
+                scoreAddition = logit_bias_lookahead(logit_bias, input_ids, self.config.vocab_size)
+
             # prepare model inputs
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
 
@@ -1641,6 +1641,8 @@ class GenerationMixin:
             # pre-process distribution
             next_token_scores = logits_processor(input_ids, next_token_logits)
             next_token_scores = logits_warper(input_ids, next_token_scores)
+            if scoreAddition is not None:
+                next_token_scores += scoreAddition()
 
             # Store scores, attentions and hidden_states when required
             if return_dict_in_generate:
