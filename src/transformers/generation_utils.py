@@ -717,7 +717,7 @@ class GenerationMixin:
         repetition_penalty_whitelist: List[int] = None,
         repetition_penalty_supplemental_blacklist: List[int] = None, #Adds an additional repetition penalty to a set of characters. 
         bad_words_ids: Optional[Iterable[int]] = None,
-        logit_bias_lookahead: Optional[Callable[[List[Tuple[List[int], float]], torch.LongTensor, int], Callable[[],torch.Tensor]]] = None,
+        logit_bias_lookahead: Optional[Callable[[torch.LongTensor, int], Callable[[],torch.Tensor]]] = None,
         bos_token_id: Optional[int] = None,
         pad_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = None,
@@ -1459,8 +1459,7 @@ class GenerationMixin:
         output_hidden_states: Optional[bool] = None,
         output_scores: Optional[bool] = None,
         output_nonzero_probs: Optional[bool] = None,
-        logit_bias: Optional[List[Tuple[List[int], float]]] = None,
-        logit_bias_lookahead: Optional[Callable[[List[Tuple[List[int], float]], torch.LongTensor, int], Callable[[],torch.Tensor]]] = None,
+        logit_bias_lookahead: Optional[Callable[[torch.LongTensor, int], Callable[[],torch.Tensor]]] = None,
         return_dict_in_generate: Optional[bool] = None,
         synced_gpus: Optional[bool] = None,
         embs: Optional[List[Tuple[int, torch.FloatTensor]]] = None,
@@ -1614,8 +1613,8 @@ class GenerationMixin:
 
 
             scoreAddition: Optional[Callable[[],torch.Tensor]] = None #We have to 'await' the result, just starting it now
-            if logit_bias is not None and logit_bias_lookahead is not None:
-                scoreAddition = logit_bias_lookahead(logit_bias, input_ids, self.config.vocab_size)
+            if logit_bias_lookahead is not None:
+                scoreAddition = logit_bias_lookahead(input_ids, self.config.vocab_size)
 
             # prepare model inputs
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
