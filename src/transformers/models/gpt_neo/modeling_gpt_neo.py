@@ -174,9 +174,9 @@ def to_gpu(x, config):
 
 cache: Dict[int, Dict[int, Tuple[torch.Tensor, torch.Tensor]]] = {}
 
-if 'FIXED_POS_EMBEDDING_DICT' in os.environ:
+if 'FIXED_POS_EMBEDDINGS_DICT' in os.environ:
     import pickle
-    with open(os.environ['FIXED_POS_EMBEDDING_DICT'], 'rb') as f:
+    with open(os.environ['FIXED_POS_EMBEDDINGS_DICT'], 'rb') as f:
         cache = pickle.load(f)
 
 #Making this symbolically computed... Trying to debug something
@@ -205,8 +205,6 @@ def fixed_pos_embedding(dim=None, seq_len=None):
                     sinusoid_inp[i][j]
                 ).evalf()) for j in range(len(sinusoid_inp[i]))
             ])
-        logger.info("HF: Returning sin (redacted): " + torch.tensor(ret_sin))
-        logger.info("HF: Returning cos (redacted): " + torch.tensor(ret_cos))
         return torch.tensor(ret_sin), torch.tensor(ret_cos)
 
 def rotate_every_two(x):
