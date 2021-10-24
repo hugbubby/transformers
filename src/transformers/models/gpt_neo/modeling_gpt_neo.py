@@ -17,7 +17,7 @@
 
 from functools import lru_cache
 import os
-from typing import List, Tuple
+from typing import Dict, List, Tuple
 
 from einops import rearrange, repeat
 import torch
@@ -171,32 +171,43 @@ def to_gpu(x, config):
         logger.info("HF: Returning x and exiting to_gpu()")
         return x
 
+
+cache: Dict[int, Dict[int, Tuple[torch.Tensor, torch.Tensor]]] = {}
+
+if 'FIXED_POS_EMBEDDING_DICT' in os.environ:
+    import pickle
+    with open(os.environ['FIXED_POS_EMBEDDING_DICT'], 'rb') as f:
+        cache = pickle.load(f)
+
 #Making this symbolically computed... Trying to debug something
 @lru_cache
 def fixed_pos_embedding(dim=None, seq_len=None):
-    import sympy
-    logger.info("HF: Running fixed_pos_embedding with dim: " + str(dim))
-    frequency = [10000 ** (i / dim) for i in sympy.Range(0, dim, 2)]
-    logger.info("HF: Running fixed_pos_embedding with frequency: " + str(frequency))
-    inv_freq = [1. / freq for freq in frequency]
-    logger.info("HF: Running fixed_pos_embedding with inv_freq: " + str(inv_freq))
-    sinusoid_inp = [[i * j for j in inv_freq] for i in sympy.Range(seq_len)]
-    ret_sin: List[List[float]] = []
-    ret_cos: List[List[float]] = []
-    for i in range(len(sinusoid_inp)):
-        ret_sin.append([
-            float(sympy.sin(
-                sinusoid_inp[i][j]
-            ).evalf()) for j in range(len(sinusoid_inp[i]))
-        ])
-        ret_cos.append([
-            float(sympy.cos(
-                sinusoid_inp[i][j]
-            ).evalf()) for j in range(len(sinusoid_inp[i]))
-        ])
-    logger.info("HF: Returning sin (redacted): " + str(ret_sin[:5]))
-    logger.info("HF: Returning cos (redacted): " + str(ret_cos[:5]))
-    return torch.tensor(ret_sin), torch.tensor(ret_cos)
+    if dim in cache and seq_len in cache[dim]:
+        return cache[dim][seq_len]
+    else:
+        import sympy
+        logger.info("HF: Running fixed_pos_embedding with dim: " + str(dim))
+        frequency = [10000 ** (i / dim) for i in sympy.Range(0, dim, 2)]
+        logger.info("HF: Running fixed_pos_embedding with frequency: " + str(frequency))
+        inv_freq = [1. / freq for freq in frequency]
+        logger.info("HF: Running fixed_pos_embedding with inv_freq: " + str(inv_freq))
+        sinusoid_inp = [[i * j for j in inv_freq] for i in sympy.Range(seq_len)]
+        ret_sin: List[List[float]] = []
+        ret_cos: List[List[float]] = []
+        for i in range(len(sinusoid_inp)):
+            ret_sin.append([
+                float(sympy.sin(
+                    sinusoid_inp[i][j]
+                ).evalf()) for j in range(len(sinusoid_inp[i]))
+            ])
+            ret_cos.append([
+                float(sympy.cos(
+                    sinusoid_inp[i][j]
+                ).evalf()) for j in range(len(sinusoid_inp[i]))
+            ])
+        logger.info("HF: Returning sin (redacted): " + torch.tensor(ret_sin))
+        logger.info("HF: Returning cos (redacted): " + torch.tensor(ret_cos))
+        return torch.tensor(ret_sin), torch.tensor(ret_cos)
 
 def rotate_every_two(x):
     x1 = x[:, :, :, ::2]
