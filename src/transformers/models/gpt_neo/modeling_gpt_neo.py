@@ -171,12 +171,41 @@ def to_gpu(x, config):
         logger.info("HF: Returning x and exiting to_gpu()")
         return x
 
+
+cache: Dict[int, Dict[int, Tuple[torch.Tensor, torch.Tensor]]] = {}
+
+if 'FIXED_POS_EMBEDDINGS_DICT' in os.environ:
+    import pickle
+    with open(os.environ['FIXED_POS_EMBEDDINGS_DICT'], 'rb') as f:
+        cache = pickle.load(f)
+
 #Making this symbolically computed... Trying to debug something
 @lru_cache
 def fixed_pos_embedding(dim=None, seq_len=None):
-    inv_freq = 1. / (10000 ** (torch.arange(0, dim, 2) / dim))
-    sinusoid_inp = torch.einsum('i , j -> i j', torch.arange(seq_len), inv_freq).float()
-    return torch.sin(sinusoid_inp), torch.cos(sinusoid_inp)
+    if dim in cache and seq_len in cache[dim]:
+        return cache[dim][seq_len]
+    else:
+        import sympy
+        logger.info("HF: Running fixed_pos_embedding with dim: " + str(dim))
+        frequency = [10000 ** (i / dim) for i in sympy.Range(0, dim, 2)]
+        logger.info("HF: Running fixed_pos_embedding with frequency: " + str(frequency))
+        inv_freq = [1. / freq for freq in frequency]
+        logger.info("HF: Running fixed_pos_embedding with inv_freq: " + str(inv_freq))
+        sinusoid_inp = [[i * j for j in inv_freq] for i in sympy.Range(seq_len)]
+        ret_sin: List[List[float]] = []
+        ret_cos: List[List[float]] = []
+        for i in range(len(sinusoid_inp)):
+            ret_sin.append([
+                float(sympy.sin(
+                    sinusoid_inp[i][j]
+                ).evalf()) for j in range(len(sinusoid_inp[i]))
+            ])
+            ret_cos.append([
+                float(sympy.cos(
+                    sinusoid_inp[i][j]
+                ).evalf()) for j in range(len(sinusoid_inp[i]))
+            ])
+        return torch.tensor(ret_sin), torch.tensor(ret_cos)
 
 def rotate_every_two(x):
     x1 = x[:, :, :, ::2]
@@ -312,11 +341,9 @@ class GPTNeoSelfAttention(nn.Module, GPTNeoAttentionMixin):
         if config.rotary_dim is not None:
             self.rotary_dim = config.rotary_dim
         if self.rotary:
-            logger.info("HF: Registering sin and cosign buffer in GPTNeoSelfAttention. FixedPosEmbedding("+str(self.rotary_dim)+","+str(max_positions)+")")
+            logger.info("HF: Registering sin and cosign buffer in GPTNeoSelfAttention.")
             sin, cos = fixed_pos_embedding(dim=self.rotary_dim, seq_len=max_positions)
-            logger.info("HF: Sin..."+ str(sin))
             self.register_buffer("sin", sin)
-            logger.info("HF: Cos..."+ str(cos))
             self.register_buffer("cos", cos)
         logger.info("HF: Finishing GPTNeoSelfAttention Init")
 
@@ -853,7 +880,7 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
     GPT_NEO_START_DOCSTRING,
 )
 class GPTNeoForCausalLM(GPTNeoPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"h\.\d+\.attn\.attention\.masked_bias", r"h\.\d+\.attn\.masked_bias", r"h\.\d+\.attn\.attention\.scale_attn", r"lm_head\.weight", r"h\.\d+\.attn\.attention\.(sin|cos)", r"h\.\d+\.attn\.attention\.bias"]
+    _keys_to_ignore_on_load_missing = [r"h\.\d+\.attn\.attention\.masked_bias", r"h\.\d+\.attn\.masked_bias", r"h\.\d+\.attn\.attention\.scale_attn", r"h\.\d+\.attn\.attention\.(sin|cos)", r"lm_head\.weight", r"h\.\d+\.attn\.attention\.bias"]
     _keys_to_ignore_on_save = [r"lm_head.weight"]
 
     def __init__(self, config):
